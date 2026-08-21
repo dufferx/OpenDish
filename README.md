@@ -13,7 +13,7 @@ features through bring-your-own-key (BYOK) credentials.
 - Per-recipe AI conversations and reviewable modification proposals
 - Conversational recipe generation
 - A global shopping list
-- Single-owner authentication
+- Email/password authentication, with optional Google OAuth
 - Provider credentials kept server-side through Supabase Edge Functions
 
 Core recipe management is designed to work without an AI provider configured.
@@ -46,14 +46,32 @@ specs/                Product specification and implementation plan
 ```bash
 corepack enable
 pnpm install
-cp .env.example apps/web/.env.local
-pnpm supabase start
-pnpm dev
+pnpm setup:local
+pnpm dev:local
 ```
 
-Fill `apps/web/.env.local` with the local Supabase URL and public key printed by
-`pnpm supabase start`. Keep provider and OAuth secrets in
-`supabase/functions/.env` for local development; both files are ignored by Git.
+`pnpm setup:local` checks Docker, starts the localhost-only Supabase stack,
+resets it to the committed migrations, derives the local URL and publishable
+key from the CLI, and writes `apps/web/.env.local` unless that file already
+contains a managed profile. If you already use `apps/web/.env.local` for a
+managed installation, rerun with `pnpm setup:local -- --backup-managed-env` or
+`--force-env`.
+
+Google OAuth is optional. Hosted installations configure it in the Supabase
+Dashboard. Local Google OAuth stays disabled by default; enable
+`[auth.external.google]` in `supabase/config.toml`, export
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, and rerun `pnpm setup:local`.
+Never expose provider secrets through `VITE_` variables.
+
+To validate the portable local profile from a fresh clone:
+
+```bash
+pnpm verify:local
+```
+
+That command runs linting, type-checking, unit tests, pgTAP, and a local smoke
+suite for Auth, Storage, Vault-backed AI configuration, and every committed
+Edge Function without making live AI calls.
 
 ## Quality checks
 
@@ -66,6 +84,22 @@ pnpm build
 
 Run the end-to-end suite separately with `pnpm test:e2e` while its required
 services are available.
+
+## Managed Supabase setup
+
+For an installation-owned hosted Supabase project:
+
+```bash
+pnpm supabase link --project-ref YOUR_PROJECT_REF
+pnpm supabase db push --linked --dry-run
+pnpm supabase db push --linked
+cp .env.example apps/web/.env.local
+pnpm dev
+```
+
+Fill `apps/web/.env.local` with that project's URL and publishable key. The
+repository never stores a project ref, service-role key, OAuth secret, or AI
+credential for the managed profile.
 
 ## Product documentation
 

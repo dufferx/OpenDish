@@ -10,13 +10,17 @@
   },
   "scripts": {
     "dev": "pnpm --filter @opendish/web dev",
+    "dev:local": "node scripts/local/dev.mjs",
     "build": "pnpm -r build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "setup:local": "node scripts/local/setup.mjs",
+    "smoke:local": "node scripts/local/smoke.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --filter=!@opendish/e2e test",
-    "test:e2e": "pnpm --filter @opendish/e2e test"
+    "test:e2e": "pnpm --filter @opendish/e2e test",
+    "verify:local": "node scripts/local/verify.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -12,8 +12,8 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     env:
-      VITE_SUPABASE_URL: http://127.0.0.1:54321
-      VITE_SUPABASE_ANON_KEY: ci-placeholder-key
+      VITE_SUPABASE_URL: http://127.0.0.1:54421
+      VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-key
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

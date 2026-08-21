@@ -5,12 +5,17 @@
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
   return new;
 end;
 $$;
+
+revoke all on schema public from anon;
+grant usage on schema public to authenticated;
+grant usage on schema public to service_role;
 
 create table public.recipes (
   id uuid primary key default gen_random_uuid(),
@@ -42,12 +47,14 @@ create trigger recipes_set_updated_at
   for each row execute function public.set_updated_at();
 
 alter table public.recipes enable row level security;
+alter table public.recipes force row level security;
 
 create policy recipes_owner_all on public.recipes
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
+revoke all on public.recipes from anon, authenticated;
 grant select, insert, update, delete on public.recipes to authenticated;
 grant all on public.recipes to service_role;
 
@@ -67,17 +74,35 @@ create table public.recipe_ingredients (
   check ((quantity_num is null) = (quantity_den is null))
 );
 
+create index recipe_ingredients_recipe_id_idx on public.recipe_ingredients (recipe_id);
+
 create trigger recipe_ingredients_set_updated_at
   before update on public.recipe_ingredients
   for each row execute function public.set_updated_at();
 
 alter table public.recipe_ingredients enable row level security;
+alter table public.recipe_ingredients force row level security;
 
 create policy recipe_ingredients_owner_all on public.recipe_ingredients
   for all to authenticated
-  using (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()))
-  with check (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()));
+  using (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  );
 
+revoke all on public.recipe_ingredients from anon, authenticated;
 grant select, insert, update, delete on public.recipe_ingredients to authenticated;
 grant all on public.recipe_ingredients to service_role;
 
@@ -91,17 +116,35 @@ create table public.recipe_steps (
   unique (recipe_id, position)
 );
 
+create index recipe_steps_recipe_id_idx on public.recipe_steps (recipe_id);
+
 create trigger recipe_steps_set_updated_at
   before update on public.recipe_steps
   for each row execute function public.set_updated_at();
 
 alter table public.recipe_steps enable row level security;
+alter table public.recipe_steps force row level security;
 
 create policy recipe_steps_owner_all on public.recipe_steps
   for all to authenticated
-  using (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()))
-  with check (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()));
+  using (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  );
 
+revoke all on public.recipe_steps from anon, authenticated;
 grant select, insert, update, delete on public.recipe_steps to authenticated;
 grant all on public.recipe_steps to service_role;
 
@@ -115,18 +158,21 @@ create table public.tags (
 
 -- Tag names are unique per user, case-insensitively.
 create unique index tags_user_id_lower_name_key on public.tags (user_id, lower(name));
+create index tags_user_id_idx on public.tags (user_id);
 
 create trigger tags_set_updated_at
   before update on public.tags
   for each row execute function public.set_updated_at();
 
 alter table public.tags enable row level security;
+alter table public.tags force row level security;
 
 create policy tags_owner_all on public.tags
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
+revoke all on public.tags from anon, authenticated;
 grant select, insert, update, delete on public.tags to authenticated;
 grant all on public.tags to service_role;
 
@@ -137,12 +183,30 @@ create table public.recipe_tags (
   primary key (recipe_id, tag_id)
 );
 
+create index recipe_tags_tag_id_idx on public.recipe_tags (tag_id);
+
 alter table public.recipe_tags enable row level security;
+alter table public.recipe_tags force row level security;
 
 create policy recipe_tags_owner_all on public.recipe_tags
   for all to authenticated
-  using (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()))
-  with check (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()));
+  using (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  );
 
+revoke all on public.recipe_tags from anon, authenticated;
 grant select, insert, update, delete on public.recipe_tags to authenticated;
 grant all on public.recipe_tags to service_role;

@@ -11,17 +11,21 @@ create table public.conversations (
   updated_at timestamptz not null default now()
 );
 
+create index conversations_user_id_idx on public.conversations (user_id);
+
 create trigger conversations_set_updated_at
   before update on public.conversations
   for each row execute function public.set_updated_at();
 
 alter table public.conversations enable row level security;
+alter table public.conversations force row level security;
 
 create policy conversations_owner_all on public.conversations
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
+revoke all on public.conversations from anon, authenticated;
 grant select, insert, update, delete on public.conversations to authenticated;
 grant all on public.conversations to service_role;
 
@@ -36,17 +40,36 @@ create table public.conversation_messages (
   unique (conversation_id, position)
 );
 
+create index conversation_messages_conversation_id_idx
+  on public.conversation_messages (conversation_id);
+
 create trigger conversation_messages_set_updated_at
   before update on public.conversation_messages
   for each row execute function public.set_updated_at();
 
 alter table public.conversation_messages enable row level security;
+alter table public.conversation_messages force row level security;
 
 create policy conversation_messages_owner_all on public.conversation_messages
   for all to authenticated
-  using (exists (select 1 from public.conversations c where c.id = conversation_id and c.user_id = auth.uid()))
-  with check (exists (select 1 from public.conversations c where c.id = conversation_id and c.user_id = auth.uid()));
+  using (
+    exists (
+      select 1
+      from public.conversations c
+      where c.id = conversation_id
+        and c.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.conversations c
+      where c.id = conversation_id
+        and c.user_id = (select auth.uid())
+    )
+  );
 
+revoke all on public.conversation_messages from anon, authenticated;
 grant select, insert, update, delete on public.conversation_messages to authenticated;
 grant all on public.conversation_messages to service_role;
 
@@ -68,16 +91,39 @@ create table public.modification_proposals (
   updated_at timestamptz not null default now()
 );
 
+create index modification_proposals_conversation_id_idx
+  on public.modification_proposals (conversation_id);
+create index modification_proposals_message_id_idx
+  on public.modification_proposals (message_id);
+create index modification_proposals_recipe_id_idx
+  on public.modification_proposals (recipe_id);
+
 create trigger modification_proposals_set_updated_at
   before update on public.modification_proposals
   for each row execute function public.set_updated_at();
 
 alter table public.modification_proposals enable row level security;
+alter table public.modification_proposals force row level security;
 
 create policy modification_proposals_owner_all on public.modification_proposals
   for all to authenticated
-  using (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()))
-  with check (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()));
+  using (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  );
 
+revoke all on public.modification_proposals from anon, authenticated;
 grant select, insert, update, delete on public.modification_proposals to authenticated;
 grant all on public.modification_proposals to service_role;

@@ -42,23 +42,21 @@ const aiConfigReader: AiConfigReader = {
       return { configured: false };
     }
 
-    const { data: secretRow, error: secretError } = await serviceClient
-      .schema('vault')
-      .from('decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('id', record.vault_secret_name as string)
-      .maybeSingle();
+    const { data: secretValue, error: secretError } = await serviceClient.rpc(
+      'read_vault_secret',
+      { secret_id: record.vault_secret_name as string },
+    );
     if (secretError) {
       throw new Error(`vault read failed: ${secretError.message}`);
     }
-    if (!secretRow) {
+    if (!secretValue) {
       return { configured: false };
     }
 
     return {
       configured: true,
       credentials: {
-        apiKey: secretRow.decrypted_secret as string,
+        apiKey: secretValue as string,
         model: record.model as string,
         baseUrl: (record.base_url as string | null) ?? undefined,
       },

@@ -12,19 +12,19 @@ export function createAiConfigReader(client: SupabaseClient): AiConfigReader {
       if (error) throw new Error('AI configuration could not be read.');
       if (!record) return { configured: false };
 
-      const { data: secret, error: secretError } = await client
-        .schema('vault')
-        .from('decrypted_secrets')
-        .select('decrypted_secret')
-        .eq('id', record.vault_secret_name as string)
-        .maybeSingle();
+      const { data: secret, error: secretError } = await client.rpc(
+        'read_vault_secret',
+        {
+          secret_id: record.vault_secret_name as string,
+        },
+      );
       if (secretError) throw new Error('AI credentials could not be read.');
       if (!secret) return { configured: false };
 
       return {
         configured: true,
         credentials: {
-          apiKey: secret.decrypted_secret as string,
+          apiKey: secret as string,
           model: record.model as string,
           baseUrl: (record.base_url as string | null) ?? undefined,
         },

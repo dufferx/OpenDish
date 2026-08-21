@@ -42,6 +42,12 @@ export interface AiConfigRecord {
 export interface AiConfigStore {
   /** Creates a new Vault secret and returns its opaque reference/name. */
   createVaultSecret(secret: string, name: string): Promise<string>;
+  /** Replaces an existing Vault secret in place and returns its reference. */
+  updateVaultSecret(
+    secretId: string,
+    secret: string,
+    name: string,
+  ): Promise<string>;
   /** Deletes the Vault secret identified by the opaque reference. */
   deleteVaultSecret(secretName: string): Promise<void>;
   /** Upserts the metadata row for the user. */
@@ -128,10 +134,28 @@ async function handleUpsert(
   }
 
   const existing = await options.store.get(userId);
-  const secretName = await options.store.createVaultSecret(
-    body.apiKey,
-    `ai-config-${userId}`,
-  );
+  let secretName: string;
+
+  if (existing) {
+    try {
+      secretName = await options.store.updateVaultSecret(
+        existing.vaultSecretName,
+        body.apiKey,
+        `ai-config-${userId}`,
+      );
+    } catch {
+      secretName = await options.store.createVaultSecret(
+        body.apiKey,
+        `ai-config-${userId}`,
+      );
+    }
+  } else {
+    secretName = await options.store.createVaultSecret(
+      body.apiKey,
+      `ai-config-${userId}`,
+    );
+  }
+
   await options.store.upsert({
     userId,
     provider: body.provider,
@@ -141,12 +165,6 @@ async function handleUpsert(
     status: 'valid',
     lastVerifiedAt: verifiedAt,
   });
-  if (existing) {
-    await options.store.deleteVaultSecret(existing.vaultSecretName).catch(() => {
-      // Best-effort cleanup of the previous secret; the new config is already
-      // active and the old reference is no longer reachable from metadata.
-    });
-  }
   return jsonResponse({ status: 'valid' });
 }
 

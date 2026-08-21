@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -10,25 +11,24 @@ import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
 
-export type AuthState =
+type AuthStatus =
   | { status: 'loading' }
   | { status: 'unauthenticated'; error: string | null }
   | { status: 'authenticated'; session: Session };
 
+export type AuthState = AuthStatus & {
+  signOut: () => Promise<{ error: string | null }>;
+};
+
 const AuthContext = createContext<AuthState | null>(null);
 
-/**
- * The server-side gate (Supabase Auth hook, T018) rejects non-owner Google
- * accounts; Supabase then redirects back here with `?error=…` in the URL.
- * We deliberately show one generic message and never surface the server's
- * error code or description.
- */
-export const PRIVATE_INSTANCE_MESSAGE = 'This instance is private.';
-
-const SESSION_ERROR_MESSAGE =
+export const REDIRECT_AUTH_ERROR_MESSAGE =
+  'Sign-in could not be completed. Please try again.';
+export const SESSION_ERROR_MESSAGE =
   'We could not verify your session. Please try signing in again.';
+export const SESSION_EXPIRED_MESSAGE =
+  'Your session expired. Please sign in again.';
 
-/** Read and strip OAuth error params from the redirect URL, if present. */
 function consumeRedirectError(): string | null {
   const search = new URLSearchParams(window.location.search);
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -36,15 +36,19 @@ function consumeRedirectError(): string | null {
     return null;
   }
   window.history.replaceState(null, '', window.location.pathname);
-  return PRIVATE_INSTANCE_MESSAGE;
+  return REDIRECT_AUTH_ERROR_MESSAGE;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({ status: 'loading' });
+  const [status, setStatus] = useState<AuthStatus>({ status: 'loading' });
+  const manualSignOutRef = useRef(false);
+  const authStatusRef = useRef<AuthStatus>({ status: 'loading' });
 
   useEffect(() => {
-    // The supabase client has already exchanged any OAuth code in the URL
-    // (detectSessionInUrl) by the time this resolves.
+    authStatusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
     const redirectError = consumeRedirectError();
     let active = true;
 
@@ -53,16 +57,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(({ data, error }) => {
         if (!active) return;
         if (error) {
-          setState({ status: 'unauthenticated', error: SESSION_ERROR_MESSAGE });
+          setStatus({
+            status: 'unauthenticated',
+            error: SESSION_ERROR_MESSAGE,
+          });
         } else if (data.session) {
-          setState({ status: 'authenticated', session: data.session });
+          setStatus({ status: 'authenticated', session: data.session });
         } else {
-          setState({ status: 'unauthenticated', error: redirectError });
+          setStatus({ status: 'unauthenticated', error: redirectError });
         }
       })
       .catch(() => {
         if (active) {
-          setState({ status: 'unauthenticated', error: SESSION_ERROR_MESSAGE });
+          setStatus({
+            status: 'unauthenticated',
+            error: SESSION_ERROR_MESSAGE,
+          });
         }
       });
 
@@ -71,9 +81,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
       if (session) {
-        setState({ status: 'authenticated', session });
-      } else if (event === 'SIGNED_OUT') {
-        setState({ status: 'unauthenticated', error: null });
+        manualSignOutRef.current = false;
+        setStatus({ status: 'authenticated', session });
+        return;
+      }
+
+      if (event === 'SIGNED_OUT') {
+        const previousStatus = authStatusRef.current.status;
+        const error =
+          manualSignOutRef.current || previousStatus !== 'authenticated'
+            ? null
+            : SESSION_EXPIRED_MESSAGE;
+        manualSignOutRef.current = false;
+        setStatus({ status: 'unauthenticated', error });
       }
     });
 
@@ -83,7 +103,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo(() => state, [state]);
+  const value = useMemo<AuthState>(
+    () => ({
+      ...status,
+      signOut: async () => {
+        manualSignOutRef.current = true;
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) {
+          manualSignOutRef.current = false;
+          return { error: 'Sign-out failed. Please try again.' };
+        }
+        return { error: null };
+      },
+    }),
+    [status],
+  );
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

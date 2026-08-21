@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>HowTo Recipe</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Recipe",
+        "name": "HowToSection Soup",
+        "description": "A simple soup with sectioned instructions.",
+        "recipeYield": 6,
+        "prepTime": 15,
+        "cookTime": "PT30M",
+        "publisher": { "@type": "Organization", "name": "Soup Co." },
+        "recipeIngredient": [
+          "2 lbs potatoes",
+          "1/2 cup diced onion",
+          "4 cups vegetable broth",
+          "1 tsp salt"
+        ],
+        "recipeInstructions": [
+          {
+            "@type": "HowToSection",
+            "name": "Prep",
+            "itemListElement": [
+              {
+                "@type": "HowToStep",
+                "text": "Peel and chop the potatoes."
+              },
+              {
+                "@type": "HowToStep",
+                "text": "Dice the onion."
+              }
+            ]
+          },
+          {
+            "@type": "HowToSection",
+            "name": "Cook",
+            "itemListElement": [
+              {
+                "@type": "HowToStep",
+                "text": "Simmer vegetables in broth for 25 minutes."
+              },
+              {
+                "@type": "HowToStep",
+                "text": "Blend until smooth and season with salt."
+              }
+            ]
+          }
+        ],
+        "recipeCategory": ["soup", "vegetarian"]
+      }
+    </script>
+  </head>
+  <body>
+    <h1>HowToSection Soup</h1>
+  </body>
+</html>

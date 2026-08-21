@@ -1,0 +1,12 @@
+node_modules
+dist
+**/dist
+playwright-report
+test-results
+pnpm-lock.yaml
+specs
+.specify
+supabase
+.kimi-code
+apps/web/src/components/ui
+apps/web/src/styles

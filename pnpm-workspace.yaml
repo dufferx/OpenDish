@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+  - tests/*
+  - supabase/*
+
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: set this to true or false

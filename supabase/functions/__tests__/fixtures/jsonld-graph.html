@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Graph Recipe</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "name": "Recipe Page"
+          },
+          {
+            "@type": "Recipe",
+            "name": "Schema Graph Pancakes",
+            "description": "Fluffy pancakes from a @graph block.",
+            "recipeYield": "4 servings",
+            "prepTime": "PT10M",
+            "cookTime": "PT15M",
+            "author": { "@type": "Person", "name": "Graph Chef" },
+            "recipeIngredient": [
+              "1 1/2 cups all-purpose flour",
+              "2 tbsp sugar",
+              "1 tsp baking powder",
+              "1 1/4 cups milk"
+            ],
+            "recipeInstructions": {
+              "@type": "HowToSection",
+              "name": "Instructions",
+              "itemListElement": [
+                {
+                  "@type": "HowToStep",
+                  "text": "Whisk dry ingredients together."
+                },
+                {
+                  "@type": "HowToStep",
+                  "text": "Stir in milk until just combined."
+                },
+                {
+                  "@type": "HowToStep",
+                  "text": "Cook on a hot griddle."
+                }
+              ]
+            },
+            "keywords": "breakfast, pancakes"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Schema Graph Pancakes</h1>
+  </body>
+</html>

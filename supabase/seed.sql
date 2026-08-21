@@ -1,0 +1,2 @@
+-- No seed data required (data-model.md): the owner signs in with Google on first
+-- run. This file exists only because db.seed.sql_paths references it.

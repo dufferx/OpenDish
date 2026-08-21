@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+**/dist/
+
+# Env files (see .env.example)
+.env
+.env.local
+**/.env
+**/.env.local
+!**/.env.example
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+supabase/functions/.env
+
+# Test artifacts
+playwright-report/
+test-results/
+coverage/
+
+# Tooling caches
+*.tsbuildinfo
+.vite/
+
+# Local specification and AI tooling
+.kimi-code/
+.specify/
+.specs/
+specs/

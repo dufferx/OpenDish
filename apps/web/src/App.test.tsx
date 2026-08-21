@@ -27,8 +27,6 @@ describe('App', () => {
       </MemoryRouter>,
     );
 
-    expect(
-      await screen.findByRole('button', { name: 'Sign in with Google' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
   });
 });

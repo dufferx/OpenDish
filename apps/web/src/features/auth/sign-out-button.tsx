@@ -3,16 +3,17 @@ import { LogOutIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/features/auth/auth-context';
 
 export function SignOutButton() {
   const [pending, setPending] = useState(false);
+  const auth = useAuth();
 
   async function handleSignOut() {
     setPending(true);
-    const { error } = await supabase.auth.signOut();
+    const { error } = await auth.signOut();
     if (error) {
-      toast.error('Sign-out failed. Please try again.');
+      toast.error(error);
       setPending(false);
     }
     // On success AuthProvider flips to unauthenticated and AuthGuard

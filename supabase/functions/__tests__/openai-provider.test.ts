@@ -97,6 +97,32 @@ describe('createOpenAiProvider', () => {
   });
 
   describe('generateRecipe', () => {
+    it('uses an object root schema accepted by OpenAI Structured Outputs', async () => {
+      let requestBody: Record<string, unknown> | null = null;
+      const provider = createOpenAiProvider({
+        fetchFn: async (_input, init) => {
+          requestBody = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
+          return makeResponse(
+            chatCompletionPayload(
+              JSON.stringify({ kind: 'draft', draft: validDraftJson() }),
+            ),
+          );
+        },
+      });
+
+      await provider.generateRecipe([], credentials);
+
+      expect(requestBody).not.toBeNull();
+      const responseFormat = requestBody?.response_format as {
+        json_schema?: { schema?: { type?: string }; strict?: boolean };
+      };
+      expect(responseFormat.json_schema?.schema?.type).toBe('object');
+      expect(responseFormat.json_schema?.strict).toBe(true);
+    });
+
     it('returns a draft when AI emits schema-valid JSON', async () => {
       const provider = createOpenAiProvider({
         fetchFn: staticFetch(
@@ -131,6 +157,28 @@ describe('createOpenAiProvider', () => {
       expect(result.value.kind).toBe('clarify');
       if (result.value.kind !== 'clarify') return;
       expect(result.value.question).toBe('What protein?');
+    });
+
+    it('accepts nullable companion fields emitted by Structured Outputs', async () => {
+      const provider = createOpenAiProvider({
+        fetchFn: staticFetch(
+          makeResponse(
+            chatCompletionPayload(
+              JSON.stringify({
+                kind: 'draft',
+                question: null,
+                draft: validDraftJson(),
+              }),
+            ),
+          ),
+        ),
+      });
+
+      const result = await provider.generateRecipe([], credentials);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.kind).toBe('draft');
     });
 
     it('returns invalid_ai_output for non-JSON content', async () => {

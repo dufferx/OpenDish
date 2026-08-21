@@ -195,4 +195,24 @@ describe('ReviewScreen (T040)', () => {
     expect(variables.draft.title).toBe('Edited Generated Stew');
     expect(variables.draft.origin).toBe('ai_generated');
   });
+
+  it('calls onSaved and ignores repeated submissions after saving', async () => {
+    const onSaved = vi.fn();
+    const { user } = renderReviewScreen({
+      origin: 'ai_generated',
+      onSaved,
+    });
+    const saveButton = screen.getByRole('button', {
+      name: /Save generated recipe/i,
+    });
+
+    await user.click(saveButton);
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledWith('r1');
+    });
+    await user.click(saveButton);
+
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    expect(saveButton).toBeDisabled();
+  });
 });

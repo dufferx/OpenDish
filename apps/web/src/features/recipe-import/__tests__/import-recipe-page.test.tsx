@@ -10,6 +10,10 @@ import {
   type ImportResult,
 } from '@/features/recipe-import/import-recipe-api.ts';
 
+const mocks = vi.hoisted(() => ({
+  useAiConfigurationStatus: vi.fn(),
+}));
+
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
@@ -26,6 +30,13 @@ vi.mock('@/features/recipe-editor/use-recipe-mutation.ts', () => ({
     isError: false,
     error: null,
   }),
+}));
+
+vi.mock('@/features/ai-config', () => ({
+  useAiConfigurationStatus: mocks.useAiConfigurationStatus,
+  AiAvailabilityBanner: ({ capability }: { capability: string }) => (
+    <div data-testid="ai-availability-banner">{capability}</div>
+  ),
 }));
 
 vi.mock('@/features/recipe-import/import-recipe-api.ts', async () => {
@@ -68,9 +79,27 @@ function renderPage() {
   return { user };
 }
 
+function setValidAiConfiguration() {
+  mocks.useAiConfigurationStatus.mockReturnValue({
+    configuration: {
+      configured: true,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      baseUrl: 'https://api.openai.com/v1',
+      status: 'valid',
+      lastVerifiedAt: '2026-08-21T00:00:00Z',
+    },
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(),
+  });
+}
+
 describe('ImportRecipePage (T040/T042)', () => {
   beforeEach(() => {
     mockImportRecipe.mockReset();
+    mocks.useAiConfigurationStatus.mockReset();
+    setValidAiConfiguration();
   });
 
   it('extracts from a URL and shows the review screen', async () => {
@@ -180,5 +209,62 @@ describe('ImportRecipePage (T040/T042)', () => {
       expect(screen.getByText(/Import a recipe/i)).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/Recipe URL/i)).toHaveValue('');
+  });
+
+  it('keeps URL import available while pasted text import is disabled without AI configuration', async () => {
+    mocks.useAiConfigurationStatus.mockReturnValue({
+      configuration: { configured: false },
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    const { user } = renderPage();
+
+    expect(screen.getByTestId('ai-availability-banner')).toHaveTextContent(
+      'importing recipes',
+    );
+    expect(screen.getByLabelText(/Recipe URL/i)).toBeEnabled();
+    await user.type(
+      screen.getByLabelText(/Recipe URL/i),
+      'https://example.com/soup',
+    );
+    expect(
+      screen.getByRole('button', { name: /Extract recipe/i }),
+    ).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /Paste text/i }));
+
+    expect(screen.getByLabelText(/Recipe text/i)).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /Extract recipe/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('link', { name: /create the recipe manually instead/i }),
+    ).toHaveAttribute('href', '/recipes/new');
+  });
+
+  it('offers Settings when a config-related provider error is returned', async () => {
+    mockImportRecipe.mockRejectedValue(
+      new ImportRecipeError(
+        'provider_error',
+        'The configured AI provider rejected the API key.',
+      ),
+    );
+    const { user } = renderPage();
+
+    await user.click(screen.getByRole('button', { name: /Paste text/i }));
+    await user.type(
+      screen.getByLabelText(/Recipe text/i),
+      'Lentil soup: 1 cup lentils, simmer.',
+    );
+    await user.click(screen.getByRole('button', { name: /Extract recipe/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/AI provider error/i);
+    });
+
+    expect(
+      screen.getByRole('link', { name: /Open Settings/i }),
+    ).toHaveAttribute('href', '/settings');
   });
 });

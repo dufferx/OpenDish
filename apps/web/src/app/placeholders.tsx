@@ -91,13 +91,3 @@ export function ShoppingListPage() {
     />
   );
 }
-
-export function SettingsPage() {
-  return (
-    <PagePlaceholder
-      title="Settings"
-      taskRef="T072"
-      description="Configure your AI provider credentials (BYOK)"
-    />
-  );
-}

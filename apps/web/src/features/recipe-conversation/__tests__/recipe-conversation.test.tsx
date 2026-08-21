@@ -9,6 +9,7 @@ import type { RecipeDetail } from '@/features/recipes/recipe-queries.ts';
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
+  useAiConfigurationStatus: vi.fn(),
   conversation: { data: { id: 'conversation-1' }, error: null },
   messages: {
     data: [
@@ -53,6 +54,13 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
+vi.mock('@/features/ai-config', () => ({
+  useAiConfigurationStatus: mocks.useAiConfigurationStatus,
+  AiAvailabilityBanner: ({ capability }: { capability: string }) => (
+    <div data-testid="ai-availability-banner">{capability}</div>
+  ),
+}));
+
 const recipe: RecipeDetail = {
   id: 'recipe-1',
   title: 'Tomato pasta',
@@ -82,9 +90,27 @@ function renderConversation() {
   );
 }
 
+function setValidAiConfiguration() {
+  mocks.useAiConfigurationStatus.mockReturnValue({
+    configuration: {
+      configured: true,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      baseUrl: 'https://api.openai.com/v1',
+      status: 'valid',
+      lastVerifiedAt: '2026-08-21T00:00:00Z',
+    },
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(),
+  });
+}
+
 describe('RecipeConversation', () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
+    mocks.useAiConfigurationStatus.mockReset();
+    setValidAiConfiguration();
     mocks.proposals.data = [];
     mocks.invoke.mockResolvedValue({
       data: { kind: 'answer', content: 'Done.' },
@@ -176,5 +202,38 @@ describe('RecipeConversation', () => {
     expect(screen.getByLabelText('Message')).toBeEnabled();
 
     finishRequest({ data: null, error: new Error('aborted') });
+  });
+
+  it('keeps loaded history visible while disabling new AI requests without configuration', async () => {
+    mocks.useAiConfigurationStatus.mockReturnValue({
+      configuration: { configured: false },
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    mocks.proposals.data = [
+      {
+        id: 'proposal-current',
+        message_id: 'm2',
+        base_version: 1,
+        operations: [{ kind: 'setTitle', title: 'Vegetarian tomato pasta' }],
+        status: 'pending',
+        created_at: '2026-08-21T00:00:00Z',
+      },
+    ];
+
+    renderConversation();
+
+    expect(await screen.findByText('Can I freeze this?')).toBeVisible();
+    expect(screen.getByTestId('ai-availability-banner')).toHaveTextContent(
+      'recipe assistance',
+    );
+    expect(screen.getByLabelText('Message')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Ask AI/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Apply$/i })).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: /Save as variant/i }),
+    ).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Discard$/i })).toBeEnabled();
   });
 });

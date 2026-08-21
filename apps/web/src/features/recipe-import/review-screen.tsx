@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AlertTriangleIcon, BotIcon, FileTextIcon } from 'lucide-react';
 
 import type { RecipeDraft } from '@opendish/contracts';
@@ -16,6 +17,7 @@ export interface ReviewScreenProps {
   origin: DraftOrigin;
   extractionMethod?: ExtractionMethod;
   onDiscard: () => void;
+  onSaved?: (recipeId: string) => void;
 }
 
 function bannerForOrigin(
@@ -54,8 +56,10 @@ export function ReviewScreen({
   origin,
   extractionMethod,
   onDiscard,
+  onSaved,
 }: ReviewScreenProps) {
   const mutation = useRecipeMutation();
+  const [hasSaved, setHasSaved] = useState(false);
 
   const initialValues: RecipeFormValues = draftToFormValues(draft);
 
@@ -63,7 +67,9 @@ export function ReviewScreen({
     parsedDraft: RecipeDraft,
     imageFile: File | null,
   ) => {
-    await mutation.mutateAsync({
+    if (hasSaved) return;
+
+    const result = await mutation.mutateAsync({
       draft: {
         ...parsedDraft,
         recipeId: null,
@@ -74,6 +80,8 @@ export function ReviewScreen({
       },
       imageFile,
     });
+    setHasSaved(true);
+    onSaved?.(result.recipeId);
   };
 
   const banner = bannerForOrigin(origin, extractionMethod);
@@ -120,7 +128,7 @@ export function ReviewScreen({
       <RecipeEditorForm
         initialValues={initialValues}
         onSubmit={handleSubmit}
-        isSubmitting={mutation.isPending}
+        isSubmitting={mutation.isPending || hasSaved}
         submitLabel={submitLabel}
         cancelTo={origin === 'ai_generated' ? '/generate' : '/import'}
         onCancel={origin === 'ai_generated' ? onDiscard : undefined}

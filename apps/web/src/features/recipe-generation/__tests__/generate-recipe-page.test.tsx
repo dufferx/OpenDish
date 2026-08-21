@@ -10,6 +10,7 @@ import { GenerateRecipePage } from '@/features/recipe-generation/generate-recipe
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
+  useAiConfigurationStatus: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase', () => ({
@@ -32,6 +33,13 @@ vi.mock('@/features/recipe-editor/use-recipe-mutation.ts', () => ({
     isError: false,
     error: null,
   }),
+}));
+
+vi.mock('@/features/ai-config', () => ({
+  useAiConfigurationStatus: mocks.useAiConfigurationStatus,
+  AiAvailabilityBanner: ({ capability }: { capability: string }) => (
+    <div data-testid="ai-availability-banner">{capability}</div>
+  ),
 }));
 
 const GENERATED_DRAFT: RecipeDraft = {
@@ -60,9 +68,27 @@ function renderPage() {
   return { user };
 }
 
+function setValidAiConfiguration() {
+  mocks.useAiConfigurationStatus.mockReturnValue({
+    configuration: {
+      configured: true,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      baseUrl: 'https://api.openai.com/v1',
+      status: 'valid',
+      lastVerifiedAt: '2026-08-21T00:00:00Z',
+    },
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(),
+  });
+}
+
 describe('GenerateRecipePage', () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
+    mocks.useAiConfigurationStatus.mockReset();
+    setValidAiConfiguration();
     mockMutateAsync.mockReset();
     mockMutateAsync.mockResolvedValue({ recipeId: 'r1', headVersion: 1 });
   });
@@ -185,5 +211,22 @@ describe('GenerateRecipePage', () => {
 
     expect(mockMutateAsync).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/Message/i)).toBeInTheDocument();
+  });
+
+  it('shows the availability banner and disables AI input when AI is not configured', () => {
+    mocks.useAiConfigurationStatus.mockReturnValue({
+      configuration: { configured: false },
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderPage();
+
+    expect(screen.getByTestId('ai-availability-banner')).toHaveTextContent(
+      'generating recipes',
+    );
+    expect(screen.getByLabelText(/Message/i)).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Send/i })).toBeDisabled();
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Loader2Icon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ErrorState } from '@/app/states';
+import {
+  AiAvailabilityBanner,
+  type AiConfiguration,
+  useAiConfigurationStatus,
+} from '@/features/ai-config';
 
 import {
   importRecipe,
@@ -27,7 +32,42 @@ const ERROR_TITLES: Record<ImportErrorCode, string> = {
   provider_error: 'AI provider error',
 };
 
+function hasValidAiConfiguration(
+  configuration: AiConfiguration | null | undefined,
+): boolean {
+  return (
+    typeof configuration === 'object' &&
+    configuration !== null &&
+    'configured' in configuration &&
+    configuration.configured === true &&
+    'status' in configuration &&
+    configuration.status === 'valid'
+  );
+}
+
+function shouldOfferSettings(
+  error: {
+    code: ImportErrorCode;
+    message: string;
+  } | null,
+): boolean {
+  return Boolean(
+    error &&
+    (error.code === 'ai_not_configured' ||
+      error.code === 'provider_error' ||
+      /rejected the api key|provider credentials|provider settings/i.test(
+        error.message,
+      )),
+  );
+}
+
 export function ImportRecipePage() {
+  const navigate = useNavigate();
+  const {
+    configuration,
+    isLoading: isAiConfigurationLoading,
+    error: aiConfigurationError,
+  } = useAiConfigurationStatus();
   const [activeTab, setActiveTab] = useState<Tab>('url');
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
@@ -37,9 +77,15 @@ export function ImportRecipePage() {
     message: string;
   } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const canUseAi =
+    !aiConfigurationError && hasValidAiConfiguration(configuration);
+  const showAiAvailabilityBanner =
+    isAiConfigurationLoading || aiConfigurationError || !canUseAi;
+  const textImportDisabled = isLoading || isAiConfigurationLoading || !canUseAi;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (activeTab === 'text' && textImportDisabled) return;
     setError(null);
     setResult(null);
     setIsLoading(true);
@@ -81,6 +127,7 @@ export function ImportRecipePage() {
         origin="imported"
         extractionMethod={result.extractionMethod}
         onDiscard={handleDiscard}
+        onSaved={(recipeId) => navigate(`/recipes/${recipeId}`)}
       />
     );
   }
@@ -90,6 +137,15 @@ export function ImportRecipePage() {
       <h1 id="import-title" className="text-2xl font-semibold tracking-tight">
         Import a recipe
       </h1>
+
+      {showAiAvailabilityBanner ? (
+        <AiAvailabilityBanner
+          capability="importing recipes"
+          configuration={configuration}
+          isLoading={isAiConfigurationLoading}
+          error={aiConfigurationError}
+        />
+      ) : null}
 
       <div className="flex gap-2">
         <TabButton
@@ -131,7 +187,7 @@ export function ImportRecipePage() {
               value={text}
               onChange={(event) => setText(event.target.value)}
               required
-              disabled={isLoading}
+              disabled={textImportDisabled}
               rows={10}
             />
             <p className="text-xs text-muted-foreground">
@@ -143,7 +199,9 @@ export function ImportRecipePage() {
         <Button
           type="submit"
           disabled={
-            isLoading || (activeTab === 'url' ? !url.trim() : !text.trim())
+            activeTab === 'url'
+              ? isLoading || !url.trim()
+              : textImportDisabled || !text.trim()
           }
         >
           {isLoading ? (
@@ -162,7 +220,15 @@ export function ImportRecipePage() {
         />
       ) : null}
 
-      {error ? (
+      {shouldOfferSettings(error) ? (
+        <div className="flex justify-center">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/settings">Open Settings</Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {error || showAiAvailabilityBanner ? (
         <p className="text-center text-sm text-muted-foreground">
           Or{' '}
           <Link

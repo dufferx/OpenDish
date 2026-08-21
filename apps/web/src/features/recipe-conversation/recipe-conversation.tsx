@@ -14,6 +14,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  AiAvailabilityBanner,
+  type AiConfiguration,
+  useAiConfigurationStatus,
+} from '@/features/ai-config';
+import {
   ModificationReview,
   type ProposalAction,
 } from '@/features/modification-review';
@@ -65,6 +70,50 @@ function asRecipeDraft(recipe: RecipeDetail): RecipeDraft {
   };
 }
 
+function hasValidAiConfiguration(
+  configuration: AiConfiguration | null | undefined,
+): boolean {
+  return (
+    typeof configuration === 'object' &&
+    configuration !== null &&
+    'configured' in configuration &&
+    configuration.configured === true &&
+    'status' in configuration &&
+    configuration.status === 'valid'
+  );
+}
+
+function unavailableAiMessage(
+  configuration: AiConfiguration | null | undefined,
+  isLoading: boolean,
+  error: unknown,
+): string {
+  if (isLoading) {
+    return 'Checking AI availability. Please wait a moment.';
+  }
+  if (error) {
+    return 'AI availability could not be checked. Open Settings or try again.';
+  }
+  if (
+    typeof configuration === 'object' &&
+    configuration !== null &&
+    'configured' in configuration &&
+    configuration.configured === true
+  ) {
+    return 'AI provider settings need attention before AI can be used. Open Settings.';
+  }
+  return 'AI is not configured. Add your provider credentials in Settings.';
+}
+
+function shouldOfferSettings(message: string | null): boolean {
+  return Boolean(
+    message &&
+    /(not configured|open settings|provider settings|rejected the api key|provider credentials)/i.test(
+      message,
+    ),
+  );
+}
+
 async function readableFunctionError(error: unknown): Promise<string> {
   let code = '';
   let message = error instanceof Error ? error.message : 'AI request failed.';
@@ -100,6 +149,11 @@ export function RecipeConversation({
   recipe,
   onRecipeChanged,
 }: RecipeConversationProps) {
+  const {
+    configuration,
+    isLoading: isAiConfigurationLoading,
+    error: aiConfigurationError,
+  } = useAiConfigurationStatus();
   const navigate = useNavigate();
   const currentRecipe = useMemo(() => asRecipeDraft(recipe), [recipe]);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
@@ -113,6 +167,10 @@ export function RecipeConversation({
   );
   const [error, setError] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const canUseAi =
+    !aiConfigurationError && hasValidAiConfiguration(configuration);
+  const showAiAvailabilityBanner =
+    isAiConfigurationLoading || aiConfigurationError || !canUseAi;
 
   const loadConversation = useCallback(
     async (signal?: AbortSignal) => {
@@ -231,7 +289,15 @@ export function RecipeConversation({
 
   async function invokeConversation() {
     const trimmed = message.trim();
-    if (!trimmed || isSending || pendingAction) return;
+    if (
+      !trimmed ||
+      isSending ||
+      pendingAction ||
+      !canUseAi ||
+      isAiConfigurationLoading
+    ) {
+      return;
+    }
 
     const controller = new AbortController();
     requestController.current = controller;
@@ -317,6 +383,16 @@ export function RecipeConversation({
 
   async function regenerateProposal() {
     if (!proposal || pendingAction) return;
+    if (!canUseAi || isAiConfigurationLoading) {
+      setError(
+        unavailableAiMessage(
+          configuration,
+          isAiConfigurationLoading,
+          aiConfigurationError,
+        ),
+      );
+      return;
+    }
     const request =
       [...messages].reverse().find((item) => item.role === 'user')?.content ??
       'Regenerate this modification for the current recipe.';
@@ -365,6 +441,15 @@ export function RecipeConversation({
         </p>
       </CardHeader>
       <CardContent className="grid gap-5">
+        {showAiAvailabilityBanner ? (
+          <AiAvailabilityBanner
+            capability="recipe assistance"
+            configuration={configuration}
+            isLoading={isAiConfigurationLoading}
+            error={aiConfigurationError}
+          />
+        ) : null}
+
         {isLoading ? (
           <p role="status" className="text-sm text-muted-foreground">
             Loading conversation…
@@ -421,7 +506,7 @@ export function RecipeConversation({
             className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
           >
             <p>{error}</p>
-            {/not configured/i.test(error) ? (
+            {shouldOfferSettings(error) ? (
               <Button asChild variant="outline" size="sm" className="mt-2">
                 <Link to="/settings">Open Settings</Link>
               </Button>
@@ -438,7 +523,9 @@ export function RecipeConversation({
         >
           <fieldset
             className="flex flex-wrap gap-4"
-            disabled={interactionPending}
+            disabled={
+              interactionPending || !canUseAi || isAiConfigurationLoading
+            }
           >
             <legend className="mb-2 text-sm font-medium">
               What should AI do?
@@ -474,7 +561,9 @@ export function RecipeConversation({
             id="recipe-assistant-message"
             value={message}
             maxLength={4000}
-            disabled={interactionPending}
+            disabled={
+              interactionPending || !canUseAi || isAiConfigurationLoading
+            }
             placeholder={
               intent === 'answer'
                 ? 'What can I substitute for the tomatoes?'
@@ -485,7 +574,12 @@ export function RecipeConversation({
           <div className="flex flex-wrap gap-2">
             <Button
               type="submit"
-              disabled={interactionPending || message.trim().length === 0}
+              disabled={
+                interactionPending ||
+                !canUseAi ||
+                isAiConfigurationLoading ||
+                message.trim().length === 0
+              }
             >
               {isSending
                 ? 'Waiting for AI…'

@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppLayout } from '@/app/app-layout';
-import { SettingsPage } from '@/app/placeholders';
+import { AiSettingsPage } from '@/features/ai-config';
 import { ShoppingListPage } from '@/features/shopping-list';
 import { GenerateRecipePage } from '@/features/recipe-generation';
 import { ImportRecipePage } from '@/features/recipe-import';
@@ -39,7 +39,7 @@ export function AppRoutes() {
         <Route path="import" element={<ImportRecipePage />} />
         <Route path="generate" element={<GenerateRecipePage />} />
         <Route path="shopping-list" element={<ShoppingListPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings" element={<AiSettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

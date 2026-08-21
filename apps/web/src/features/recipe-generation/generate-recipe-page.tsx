@@ -1,10 +1,15 @@
 import { BotIcon, SparklesIcon, UserIcon, XIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AiAvailabilityBanner,
+  type AiConfiguration,
+  useAiConfigurationStatus,
+} from '@/features/ai-config';
 import { ReviewScreen } from '@/features/recipe-import/review-screen.tsx';
 import type { RecipeDraft } from '@opendish/contracts';
 
@@ -17,6 +22,28 @@ interface StoredMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+}
+
+function hasValidAiConfiguration(
+  configuration: AiConfiguration | null | undefined,
+): boolean {
+  return (
+    typeof configuration === 'object' &&
+    configuration !== null &&
+    'configured' in configuration &&
+    configuration.configured === true &&
+    'status' in configuration &&
+    configuration.status === 'valid'
+  );
+}
+
+function shouldOfferSettings(message: string | null): boolean {
+  return Boolean(
+    message &&
+    /(not configured|rejected the api key|provider credentials|provider settings)/i.test(
+      message,
+    ),
+  );
 }
 
 function readableError(error: unknown): string {
@@ -36,6 +63,12 @@ function readableError(error: unknown): string {
 }
 
 export function GenerateRecipePage() {
+  const navigate = useNavigate();
+  const {
+    configuration,
+    isLoading: isAiConfigurationLoading,
+    error: aiConfigurationError,
+  } = useAiConfigurationStatus();
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState<RecipeDraft | null>(null);
@@ -43,10 +76,14 @@ export function GenerateRecipePage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const canUseAi =
+    !aiConfigurationError && hasValidAiConfiguration(configuration);
+  const showAiAvailabilityBanner =
+    isAiConfigurationLoading || aiConfigurationError || !canUseAi;
 
   const submit = useCallback(async () => {
     const trimmed = message.trim();
-    if (!trimmed || isSending) return;
+    if (!trimmed || isSending || !canUseAi || isAiConfigurationLoading) return;
 
     const controller = new AbortController();
     requestController.current = controller;
@@ -94,7 +131,14 @@ export function GenerateRecipePage() {
         setIsSending(false);
       }
     }
-  }, [message, isSending, conversationId, messages.length]);
+  }, [
+    canUseAi,
+    conversationId,
+    isAiConfigurationLoading,
+    isSending,
+    message,
+    messages.length,
+  ]);
 
   function cancelRequest() {
     requestController.current?.abort();
@@ -112,6 +156,7 @@ export function GenerateRecipePage() {
         draft={draft}
         origin="ai_generated"
         onDiscard={handleDiscard}
+        onSaved={(recipeId) => navigate(`/recipes/${recipeId}`)}
       />
     );
   }
@@ -132,6 +177,15 @@ export function GenerateRecipePage() {
         </p>
       </CardHeader>
       <CardContent className="grid gap-5">
+        {showAiAvailabilityBanner ? (
+          <AiAvailabilityBanner
+            capability="generating recipes"
+            configuration={configuration}
+            isLoading={isAiConfigurationLoading}
+            error={aiConfigurationError}
+          />
+        ) : null}
+
         {messages.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No messages yet. Describe the recipe you have in mind.
@@ -171,7 +225,7 @@ export function GenerateRecipePage() {
             className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
           >
             <p>{error}</p>
-            {/not configured/i.test(error) ? (
+            {shouldOfferSettings(error) ? (
               <Button asChild variant="outline" size="sm" className="mt-2">
                 <Link to="/settings">Open Settings</Link>
               </Button>
@@ -193,14 +247,19 @@ export function GenerateRecipePage() {
             id="generate-message"
             value={message}
             maxLength={4000}
-            disabled={isSending}
+            disabled={isSending || !canUseAi || isAiConfigurationLoading}
             placeholder="e.g. A high-protein chicken dinner for two"
             onChange={(event) => setMessage(event.target.value)}
           />
           <div className="flex flex-wrap gap-2">
             <Button
               type="submit"
-              disabled={isSending || message.trim().length === 0}
+              disabled={
+                isSending ||
+                !canUseAi ||
+                isAiConfigurationLoading ||
+                message.trim().length === 0
+              }
             >
               {isSending ? 'Waiting for AI…' : 'Send'}
             </Button>

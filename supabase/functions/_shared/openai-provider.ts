@@ -234,23 +234,18 @@ const modificationProposalJsonSchema = {
 } as const;
 
 const generateRecipeOutcomeJsonSchema = {
-  anyOf: [
-    {
-      type: 'object',
-      properties: {
-        kind: { const: 'clarify' },
-        question: { type: 'string' },
-      },
-      required: ['kind', 'question'],
-      additionalProperties: false,
-    },
-    {
-      type: 'object',
-      properties: { kind: { const: 'draft' }, draft: recipeDraftJsonSchema },
-      required: ['kind', 'draft'],
-      additionalProperties: false,
-    },
-  ],
+  // OpenAI Structured Outputs requires the root schema to be an object.
+  // Represent the two outcomes with nullable companion fields so the model
+  // cannot flatten recipe fields into the root object. The discriminated Zod
+  // schema below remains the authoritative valid-combination check.
+  type: 'object',
+  properties: {
+    kind: { enum: ['clarify', 'draft'] },
+    question: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    draft: { anyOf: [recipeDraftJsonSchema, { type: 'null' }] },
+  },
+  required: ['kind', 'question', 'draft'],
+  additionalProperties: false,
 } as const;
 
 const generateRecipeOutcomeSchema = z.discriminatedUnion('kind', [
@@ -333,7 +328,11 @@ export function createOpenAiProvider(
   async function chatCompletion(
     credentials: AiCredentials,
     messages: ChatMessage[],
-    jsonSchema?: { name: string; schema: Record<string, unknown> },
+    jsonSchema?: {
+      name: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    },
   ): Promise<Result<string>> {
     const body: Record<string, unknown> = {
       model: credentials.model,
@@ -342,7 +341,13 @@ export function createOpenAiProvider(
     if (jsonSchema) {
       body.response_format = {
         type: 'json_schema',
-        json_schema: { name: jsonSchema.name, schema: jsonSchema.schema },
+        json_schema: {
+          name: jsonSchema.name,
+          schema: jsonSchema.schema,
+          ...(jsonSchema.strict === undefined
+            ? {}
+            : { strict: jsonSchema.strict }),
+        },
       };
     }
     const result = await fetchWithTimeout(
@@ -388,7 +393,11 @@ export function createOpenAiProvider(
   async function structuredCompletion<Schema extends z.ZodTypeAny>(
     credentials: AiCredentials,
     messages: ChatMessage[],
-    jsonSchema: { name: string; schema: Record<string, unknown> },
+    jsonSchema: {
+      name: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    },
     outputSchema: Schema,
   ): Promise<Result<z.infer<Schema>>> {
     const completion = await chatCompletion(credentials, messages, jsonSchema);
@@ -453,7 +462,11 @@ export function createOpenAiProvider(
       return structuredCompletion(
         credentials,
         messages,
-        { name: 'generate_recipe_outcome', schema: generateRecipeOutcomeJsonSchema },
+        {
+          name: 'generate_recipe_outcome',
+          schema: generateRecipeOutcomeJsonSchema,
+          strict: true,
+        },
         generateRecipeOutcomeSchema,
       );
     },

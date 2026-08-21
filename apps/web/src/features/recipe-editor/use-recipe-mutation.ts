@@ -17,11 +17,23 @@ export interface RecipeMutationVariables {
 async function saveWithOptionalImage(
   variables: RecipeMutationVariables,
 ): Promise<SaveRecipeResult> {
-  const { draft, imageFile } = variables;
+  const { imageFile } = variables;
+  let { draft } = variables;
 
   // For creates, first persist the recipe so we know the recipe id for the
   // storage path (`{user_id}/{recipe_id}/{file}`).
   if (draft.recipeId === null) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('You must be signed in to create recipes.');
+    }
+
+    // Derive ownership from the verified Supabase user instead of trusting a
+    // caller-supplied id. RLS remains the final authorization boundary.
+    draft = { ...draft, userId: user.id };
     const created = await saveRecipe(supabase, { ...draft, imagePath: null });
     if (imageFile) {
       const imagePath = await uploadRecipeImage(imageFile, created.recipeId);

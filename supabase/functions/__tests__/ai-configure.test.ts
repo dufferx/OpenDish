@@ -11,6 +11,9 @@ import type { AiCredentials, Result } from '../../../packages/contracts/src/inde
 
 const TEST_USER = '00000000-0000-0000-0000-000000000001';
 const OTHER_USER = '00000000-0000-0000-0000-000000000002';
+const SECRET_SENTINEL = 'sk-test-secret-sentinel';
+const SECRET_REFERENCE_SENTINEL = 'vault-secret-ref-sentinel';
+const PROVIDER_ERROR_SENTINEL = 'provider-error-sentinel';
 
 function authVerifier(userId: string = TEST_USER): AuthVerifier {
   return async () => ({ ok: true, userId });
@@ -136,6 +139,28 @@ function makeRequest(body: unknown, token = 'valid-token'): Request {
   });
 }
 
+function makeRawRequest(body: string, token = 'valid-token'): Request {
+  return new Request('http://localhost/ai-configure', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+}
+
+async function expectNoLeak(
+  response: Response,
+  forbiddenValues: string[],
+): Promise<unknown> {
+  const rawBody = await response.text();
+  for (const forbiddenValue of forbiddenValues) {
+    expect(rawBody).not.toContain(forbiddenValue);
+  }
+  return rawBody.length > 0 ? JSON.parse(rawBody) : null;
+}
+
 describe('ai-configure handler', () => {
   it('requires POST and rejects other methods', async () => {
     const { store } = fakeStore();
@@ -189,15 +214,17 @@ describe('ai-configure handler', () => {
       makeRequest({
         action: 'upsert',
         provider: 'openai',
-        apiKey: 'sk-secret',
+        apiKey: SECRET_SENTINEL,
         model: 'gpt-4o',
       }),
     );
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await expectNoLeak(response, [SECRET_SENTINEL]);
     expect(body.status).toBe('valid');
 
-    expect(vault.get(`vault-ai-config-${TEST_USER}`)?.secret).toBe('sk-secret');
+    expect(vault.get(`vault-ai-config-${TEST_USER}`)?.secret).toBe(
+      SECRET_SENTINEL,
+    );
     const record = records.get(TEST_USER);
     expect(record).toBeDefined();
     expect(record?.provider).toBe('openai');
@@ -255,19 +282,24 @@ describe('ai-configure handler', () => {
     const handler = createAiConfigureHandler({
       verifyAuth: authVerifier(),
       store,
-      validateCredentials: fakeValidator(
-        err({ code: 'invalid_credentials', message: 'bad key' }),
-      ),
+      validateCredentials: async (credentials) =>
+        err({
+          code: 'invalid_credentials',
+          message: `${PROVIDER_ERROR_SENTINEL}:${credentials.apiKey}`,
+        }),
     });
     const response = await handler(
       makeRequest({
         action: 'upsert',
         provider: 'openai',
-        apiKey: 'sk-bad',
+        apiKey: SECRET_SENTINEL,
       }),
     );
     expect(response.status).toBe(422);
-    const body = await response.json();
+    const body = await expectNoLeak(response, [
+      SECRET_SENTINEL,
+      PROVIDER_ERROR_SENTINEL,
+    ]);
     expect(body.error.code).toBe('invalid_credentials');
     expect(records.get(TEST_USER)).toBeUndefined();
   });
@@ -307,7 +339,7 @@ describe('ai-configure handler', () => {
       provider: 'openai',
       model: 'gpt-4o-mini',
       baseUrl: 'https://api.openai.com/v1',
-      vaultSecretName: 'vault-existing',
+      vaultSecretName: SECRET_REFERENCE_SENTINEL,
       status: 'valid',
       lastVerifiedAt: '2024-01-01T00:00:00.000Z',
     };
@@ -319,7 +351,7 @@ describe('ai-configure handler', () => {
     });
     const response = await handler(makeRequest({ action: 'remove' }));
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await expectNoLeak(response, [SECRET_REFERENCE_SENTINEL]);
     expect(body.status).toBe('unconfigured');
     expect(records.get(TEST_USER)).toBeUndefined();
     const deleteCall = calls.find(
@@ -327,7 +359,7 @@ describe('ai-configure handler', () => {
     );
     expect(deleteCall).toEqual({
       method: 'deleteVaultSecret',
-      secretName: 'vault-existing',
+      secretName: SECRET_REFERENCE_SENTINEL,
     });
   });
 
@@ -352,7 +384,7 @@ describe('ai-configure handler', () => {
       provider: 'openai',
       model: 'gpt-4o-mini',
       baseUrl: 'https://api.openai.com/v1',
-      vaultSecretName: 'vault-secret-name',
+      vaultSecretName: SECRET_REFERENCE_SENTINEL,
       status: 'valid',
       lastVerifiedAt: '2024-06-01T12:00:00.000Z',
     };
@@ -364,17 +396,17 @@ describe('ai-configure handler', () => {
     });
     const response = await handler(makeRequest({ action: 'status' }));
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await expectNoLeak(response, [SECRET_REFERENCE_SENTINEL]);
     expect(body).toEqual({
       configured: true,
       provider: 'openai',
       model: 'gpt-4o-mini',
+      baseUrl: 'https://api.openai.com/v1',
       status: 'valid',
       lastVerifiedAt: '2024-06-01T12:00:00.000Z',
     });
     expect(body).not.toHaveProperty('apiKey');
     expect(body).not.toHaveProperty('vaultSecretName');
-    expect(JSON.stringify(body)).not.toContain('vault-secret-name');
   });
 
   it('status only returns the users own configuration', async () => {
@@ -474,5 +506,64 @@ describe('ai-configure handler', () => {
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error.code).toBe('validation_failed');
+  });
+
+  it('does not leak secrets in validation, provider error, or internal error responses', async () => {
+    const validationStore = fakeStore().store;
+    const validationHandler = createAiConfigureHandler({
+      verifyAuth: authVerifier(),
+      store: validationStore,
+      validateCredentials: fakeValidator(),
+    });
+    const validationResponse = await validationHandler(
+      makeRequest({
+        action: 'upsert',
+        provider: 'openai',
+        apiKey: '',
+        model: SECRET_SENTINEL,
+      }),
+    );
+    expect(validationResponse.status).toBe(400);
+    const validationBody = await expectNoLeak(validationResponse, [
+      SECRET_SENTINEL,
+    ]);
+    expect(validationBody.error.code).toBe('validation_failed');
+
+    const invalidJsonStore = fakeStore().store;
+    const invalidJsonHandler = createAiConfigureHandler({
+      verifyAuth: authVerifier(),
+      store: invalidJsonStore,
+      validateCredentials: fakeValidator(),
+    });
+    const invalidJsonResponse = await invalidJsonHandler(
+      makeRawRequest(`{"action":"upsert","apiKey":"${SECRET_SENTINEL}"`),
+    );
+    expect(invalidJsonResponse.status).toBe(400);
+    const invalidJsonBody = await expectNoLeak(invalidJsonResponse, [
+      SECRET_SENTINEL,
+    ]);
+    expect(invalidJsonBody.error.code).toBe('invalid_json');
+
+    const providerErrorStore = fakeStore().store;
+    const providerErrorHandler = createAiConfigureHandler({
+      verifyAuth: authVerifier(),
+      store: providerErrorStore,
+      validateCredentials: async (credentials) => {
+        throw new Error(`${PROVIDER_ERROR_SENTINEL}:${credentials.apiKey}`);
+      },
+    });
+    const providerErrorResponse = await providerErrorHandler(
+      makeRequest({
+        action: 'upsert',
+        provider: 'openai',
+        apiKey: SECRET_SENTINEL,
+      }),
+    );
+    expect(providerErrorResponse.status).toBe(500);
+    const providerErrorBody = await expectNoLeak(providerErrorResponse, [
+      SECRET_SENTINEL,
+      PROVIDER_ERROR_SENTINEL,
+    ]);
+    expect(providerErrorBody.error.code).toBe('internal_error');
   });
 });

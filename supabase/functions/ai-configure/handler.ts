@@ -194,6 +194,7 @@ async function handleStatus(
     configured: true,
     provider: existing.provider,
     model: existing.model,
+    baseUrl: existing.baseUrl,
     status: existing.status,
     lastVerifiedAt: existing.lastVerifiedAt,
   });

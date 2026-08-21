@@ -28,25 +28,36 @@ const provider = createOpenAiProvider();
 
 const store: AiConfigStore = {
   async createVaultSecret(secret, name) {
-    const { data, error } = await serviceClient
-      .schema('vault')
-      .rpc('create_secret', {
-        secret,
-        name,
-        description: 'OpenDish AI provider API key',
-      });
+    const { data, error } = await serviceClient.rpc('create_vault_secret', {
+      secret_value: secret,
+      secret_name: name,
+      secret_description: 'OpenDish AI provider API key',
+    });
     if (error) {
-      throw new Error(`vault.create_secret failed: ${error.message}`);
+      throw new Error(`create_vault_secret failed: ${error.message}`);
+    }
+    return data as string;
+  },
+
+  async updateVaultSecret(secretId, secret, name) {
+    const { data, error } = await serviceClient.rpc('update_vault_secret', {
+      secret_id: secretId,
+      secret_value: secret,
+      secret_name: name,
+      secret_description: 'OpenDish AI provider API key',
+    });
+    if (error) {
+      throw new Error(`update_vault_secret failed: ${error.message}`);
     }
     return data as string;
   },
 
   async deleteVaultSecret(secretName) {
-    const { error } = await serviceClient.schema('vault').rpc('delete_secret', {
-      secret_uuid: secretName,
+    const { error } = await serviceClient.rpc('delete_vault_secret', {
+      secret_id: secretName,
     });
     if (error) {
-      throw new Error(`vault.delete_secret failed: ${error.message}`);
+      throw new Error(`delete_vault_secret failed: ${error.message}`);
     }
   },
 

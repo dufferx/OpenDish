@@ -15,12 +15,30 @@ create table public.recipe_history (
   unique (recipe_id, version)
 );
 
+create index recipe_history_recipe_id_idx on public.recipe_history (recipe_id);
+
 alter table public.recipe_history enable row level security;
+alter table public.recipe_history force row level security;
 
 create policy recipe_history_owner_all on public.recipe_history
   for all to authenticated
-  using (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()))
-  with check (exists (select 1 from public.recipes r where r.id = recipe_id and r.user_id = auth.uid()));
+  using (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.recipes r
+      where r.id = recipe_id
+        and r.user_id = (select auth.uid())
+    )
+  );
 
+revoke all on public.recipe_history from anon, authenticated;
 grant select, insert, update, delete on public.recipe_history to authenticated;
 grant all on public.recipe_history to service_role;

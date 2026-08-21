@@ -4,8 +4,9 @@ import {
   type AiConfigRecord,
   type AiConfigStore,
 } from '../ai-configure/handler.ts';
+import { createAiConfigReader } from '../ai-propose-modification/dependencies.ts';
 import { ok, err } from '../../../packages/contracts/src/index.ts';
-import type { AuthResult, AuthVerifier } from '../_shared/http.ts';
+import type { AuthVerifier } from '../_shared/http.ts';
 import type { AiCredentials, Result } from '../../../packages/contracts/src/index.ts';
 
 const TEST_USER = '00000000-0000-0000-0000-000000000001';
@@ -26,24 +27,29 @@ function fakeStore(initial: AiConfigRecord | null = null): {
   calls: unknown[];
 } {
   const records = new Map<string, AiConfigRecord>();
-  const vault = new Map<string, string>();
+  const vault = new Map<string, { name: string; secret: string }>();
   const calls: unknown[] = [];
   if (initial) {
     records.set(TEST_USER, initial);
   }
   const store: AiConfigStore = {
     async createVaultSecret(secret, name) {
-      calls.push({ method: 'createVaultSecret', name });
-      vault.set(name, secret);
-      return `vault-${name}`;
+      const secretId = `vault-${name}`;
+      calls.push({ method: 'createVaultSecret', name, secretId });
+      vault.set(secretId, { name, secret });
+      return secretId;
+    },
+    async updateVaultSecret(secretId, secret, name) {
+      calls.push({ method: 'updateVaultSecret', name, secretId });
+      if (!vault.has(secretId)) {
+        throw new Error('missing vault secret');
+      }
+      vault.set(secretId, { name, secret });
+      return secretId;
     },
     async deleteVaultSecret(secretName) {
       calls.push({ method: 'deleteVaultSecret', secretName });
-      for (const [name, ref] of vault.entries()) {
-        if (ref === secretName) {
-          vault.delete(name);
-        }
-      }
+      vault.delete(secretName);
     },
     async upsert(params) {
       calls.push({ method: 'upsert', params });
@@ -66,6 +72,49 @@ function fakeStore(initial: AiConfigRecord | null = null): {
     },
   };
   return { store, records, vault, calls };
+}
+
+function createReaderClient(
+  records: Map<string, AiConfigRecord>,
+  vault: Map<string, { name: string; secret: string }>,
+) {
+  return {
+    from(table: string) {
+      expect(table).toBe('ai_configurations');
+      return {
+        select() {
+          return {
+            eq(column: string, userId: string) {
+              expect(column).toBe('user_id');
+              return {
+                async maybeSingle() {
+                  const record = records.get(userId);
+                  if (!record) {
+                    return { data: null, error: null };
+                  }
+                  return {
+                    data: {
+                      model: record.model,
+                      base_url: record.baseUrl,
+                      vault_secret_name: record.vaultSecretName,
+                    },
+                    error: null,
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+    async rpc(fn: string, params: { secret_id: string }) {
+      expect(fn).toBe('read_vault_secret');
+      return {
+        data: vault.get(params.secret_id)?.secret ?? null,
+        error: null,
+      };
+    },
+  };
 }
 
 function fakeValidator(
@@ -148,7 +197,7 @@ describe('ai-configure handler', () => {
     const body = await response.json();
     expect(body.status).toBe('valid');
 
-    expect(vault.get(`ai-config-${TEST_USER}`)).toBe('sk-secret');
+    expect(vault.get(`vault-ai-config-${TEST_USER}`)?.secret).toBe('sk-secret');
     const record = records.get(TEST_USER);
     expect(record).toBeDefined();
     expect(record?.provider).toBe('openai');
@@ -171,7 +220,7 @@ describe('ai-configure handler', () => {
       lastVerifiedAt: '2024-01-01T00:00:00.000Z',
     };
     const { store, records, vault, calls } = fakeStore(existing);
-    vault.set('ai-config-old-ref', 'old-secret');
+    vault.set('vault-old', { name: 'ai-config-old-ref', secret: 'old-secret' });
 
     const handler = createAiConfigureHandler({
       verifyAuth: authVerifier(),
@@ -189,12 +238,16 @@ describe('ai-configure handler', () => {
 
     const record = records.get(TEST_USER);
     expect(record?.model).toBe('gpt-4o-mini');
-    expect(record?.vaultSecretName).toBe(`vault-ai-config-${TEST_USER}`);
-    expect(vault.get(`ai-config-${TEST_USER}`)).toBe('sk-new-secret');
-    const deleteCall = calls.find(
-      (c) => (c as { method: string }).method === 'deleteVaultSecret',
+    expect(record?.vaultSecretName).toBe('vault-old');
+    expect(vault.get('vault-old')?.secret).toBe('sk-new-secret');
+    const updateCall = calls.find(
+      (c) => (c as { method: string }).method === 'updateVaultSecret',
     );
-    expect(deleteCall).toEqual({ method: 'deleteVaultSecret', secretName: 'vault-old' });
+    expect(updateCall).toEqual({
+      method: 'updateVaultSecret',
+      name: `ai-config-${TEST_USER}`,
+      secretId: 'vault-old',
+    });
   });
 
   it('upsert returns 422 invalid_credentials on provider rejection', async () => {
@@ -345,6 +398,69 @@ describe('ai-configure handler', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.configured).toBe(false);
+  });
+
+  it('supports create, read, replace, and remove without exposing secret references', async () => {
+    const { store, records, vault } = fakeStore();
+    const handler = createAiConfigureHandler({
+      verifyAuth: authVerifier(),
+      store,
+      validateCredentials: fakeValidator(),
+    });
+    const reader = createAiConfigReader(
+      createReaderClient(records, vault) as never,
+    );
+
+    const createResponse = await handler(
+      makeRequest({
+        action: 'upsert',
+        provider: 'openai',
+        apiKey: 'sk-first',
+        model: 'gpt-4o-mini',
+      }),
+    );
+    expect(createResponse.status).toBe(200);
+
+    const firstRead = await reader.getConfig(TEST_USER);
+    expect(firstRead).toEqual({
+      configured: true,
+      credentials: {
+        apiKey: 'sk-first',
+        model: 'gpt-4o-mini',
+        baseUrl: 'https://api.openai.com/v1',
+      },
+    });
+
+    const firstSecretId = records.get(TEST_USER)?.vaultSecretName;
+    expect(firstSecretId).toBeDefined();
+
+    const replaceResponse = await handler(
+      makeRequest({
+        action: 'upsert',
+        provider: 'openai',
+        apiKey: 'sk-second',
+        model: 'gpt-4.1-mini',
+      }),
+    );
+    expect(replaceResponse.status).toBe(200);
+
+    const secondRead = await reader.getConfig(TEST_USER);
+    expect(secondRead).toEqual({
+      configured: true,
+      credentials: {
+        apiKey: 'sk-second',
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://api.openai.com/v1',
+      },
+    });
+    expect(records.get(TEST_USER)?.vaultSecretName).toBe(firstSecretId);
+
+    const removeResponse = await handler(makeRequest({ action: 'remove' }));
+    expect(removeResponse.status).toBe(200);
+
+    const thirdRead = await reader.getConfig(TEST_USER);
+    expect(thirdRead).toEqual({ configured: false });
+    expect(Array.from(vault.values())).toEqual([]);
   });
 
   it('validates the request body', async () => {

@@ -12,6 +12,7 @@ import { RecipeDetailPage } from '@/features/recipes/recipe-detail-page.tsx';
 
 const saveServingAdjustment = vi.fn();
 const addRecipeToList = vi.fn();
+const historyPanelProps = vi.fn();
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -45,6 +46,30 @@ vi.mock('@/features/recipes/use-recipe-actions.ts', () => ({
   }),
 }));
 
+vi.mock('@/features/recipe-history', () => ({
+  RecipeHistoryPanel: ({
+    recipeId,
+    onRestored,
+  }: {
+    recipeId: string;
+    onRestored: () => void;
+  }) => {
+    historyPanelProps({ recipeId, onRestored });
+    return (
+      <section aria-label="recipe history">
+        <p>History for {recipeId}</p>
+        <button type="button" onClick={onRestored}>
+          Restore revision
+        </button>
+      </section>
+    );
+  },
+}));
+
+vi.mock('@/features/recipe-conversation', () => ({
+  RecipeConversation: () => <section aria-label="recipe conversation" />,
+}));
+
 vi.mock('@/features/shopping-list/shopping-list-queries.ts', () => ({
   useShoppingListActions: () => ({
     addRecipe: addRecipeToList,
@@ -61,6 +86,9 @@ const recipe: RecipeDetail = {
   cookTimeMinutes: 15,
   sourceName: null,
   sourceUrl: null,
+  sourceRecipeId: null,
+  sourceRecipe: null,
+  variantRecipes: [],
   isFavorite: false,
   imagePath: null,
   ingredients: [
@@ -74,12 +102,16 @@ const recipe: RecipeDetail = {
   headVersion: 1,
 };
 
-function renderPage(detail: RecipeDetail = recipe) {
+function renderPage(
+  detail: RecipeDetail = recipe,
+  options: { refetch?: ReturnType<typeof vi.fn> } = {},
+) {
+  const refetch = options.refetch ?? vi.fn();
   vi.mocked(useRecipeDetail).mockReturnValue({
     data: detail,
     isLoading: false,
     error: null,
-    refetch: vi.fn(),
+    refetch,
     isPending: false,
     isError: false,
     isSuccess: true,
@@ -101,6 +133,7 @@ describe('RecipeDetailPage servings scaler (T045)', () => {
     saveServingAdjustment.mockResolvedValue(undefined);
     addRecipeToList.mockReset();
     addRecipeToList.mockResolvedValue(undefined);
+    historyPanelProps.mockReset();
   });
 
   it('temporarily scales exact quantities and preserves quantity-less ingredients', async () => {
@@ -212,5 +245,82 @@ describe('RecipeDetailPage servings scaler (T045)', () => {
       recipe,
       servings: 2,
     });
+  });
+
+  it('shows the source relationship badge and wires history restores to refetch', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    renderPage(
+      {
+        ...recipe,
+        sourceRecipeId: 'recipe-source',
+        sourceRecipe: {
+          id: 'recipe-source',
+          title: 'Original pancakes',
+        },
+      },
+      { refetch },
+    );
+
+    expect(
+      screen.getByRole('link', { name: /variant of original pancakes/i }),
+    ).toHaveAttribute('href', '/recipes/recipe-source');
+    expect(screen.getByText('History for recipe-1')).toBeInTheDocument();
+    expect(historyPanelProps).toHaveBeenCalledWith({
+      recipeId: 'recipe-1',
+      onRestored: expect.any(Function),
+    });
+
+    await user.click(screen.getByRole('button', { name: /restore revision/i }));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists child variants when the recipe is a source recipe', () => {
+    renderPage({
+      ...recipe,
+      variantRecipes: [
+        { id: 'variant-1', title: 'Pancakes with berries' },
+        { id: 'variant-2', title: 'Protein pancakes' },
+      ],
+    });
+
+    expect(screen.getByText('2 variants')).toBeInTheDocument();
+    expect(screen.getByText('Recipe family')).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Pancakes with berries' }),
+    ).toHaveAttribute('href', '/recipes/variant-1');
+    expect(
+      screen.getByRole('link', { name: 'Protein pancakes' }),
+    ).toHaveAttribute('href', '/recipes/variant-2');
+  });
+
+  it('omits the standalone variants warning when the recipe has no child variants', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    expect(
+      screen.getByText(/will be permanently deleted\.$/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/standalone recipes/i)).not.toBeInTheDocument();
+  });
+
+  it('warns that child variants become standalone when deleting a source recipe', async () => {
+    const user = userEvent.setup();
+    renderPage({
+      ...recipe,
+      variantRecipes: [
+        { id: 'variant-1', title: 'Pancakes with berries' },
+        { id: 'variant-2', title: 'Protein pancakes' },
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    expect(
+      screen.getByText(
+        /2 variants currently linked to this recipe will become standalone recipes/i,
+      ),
+    ).toBeInTheDocument();
   });
 });

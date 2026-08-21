@@ -127,7 +127,7 @@ function makeInput(overrides: Partial<SaveRecipeInput> = {}): SaveRecipeInput {
 }
 
 describe('saveRecipeWithStore — create', () => {
-  it('inserts a new recipe at head_version 1 with no history', async () => {
+  it('inserts a new non-variant recipe at head_version 1 with no history', async () => {
     const store = new FakeRecipeStore();
     const result = await saveRecipeWithStore(store, makeInput());
     expect(result.headVersion).toBe(1);
@@ -138,6 +138,35 @@ describe('saveRecipeWithStore — create', () => {
       headVersion: 1,
     });
     expect(store.history).toHaveLength(0);
+  });
+
+  it('writes an initial history row for variant creation and advances head_version', async () => {
+    const store = new FakeRecipeStore();
+    const result = await saveRecipeWithStore(
+      store,
+      makeInput({
+        changeKind: 'variant_created',
+        sourceRecipeId: SOURCE_RECIPE_ID,
+      }),
+    );
+
+    expect(result.headVersion).toBe(2);
+    expect(store.recipes.get(result.recipeId)).toMatchObject({
+      sourceRecipeId: SOURCE_RECIPE_ID,
+      headVersion: 2,
+    });
+    expect(store.history).toEqual([
+      expect.objectContaining({
+        recipeId: result.recipeId,
+        version: 1,
+        changeKind: 'variant_created',
+        snapshot: expect.objectContaining({
+          title: validRecipeDraft.title,
+          servings: validRecipeDraft.servings,
+          tags: validRecipeDraft.tags,
+        }),
+      }),
+    ]);
   });
 
   it('writes ingredients and steps with positions and syncs tags', async () => {
@@ -277,15 +306,25 @@ describe('saveRecipeWithStore — update', () => {
     const store = new FakeRecipeStore();
     const { recipeId } = await saveRecipeWithStore(
       store,
-      makeInput({ sourceRecipeId: SOURCE_RECIPE_ID }),
+      makeInput({
+        changeKind: 'variant_created',
+        sourceRecipeId: SOURCE_RECIPE_ID,
+      }),
     );
     expect(store.recipes.get(recipeId)!.sourceRecipeId).toBe(SOURCE_RECIPE_ID);
+    expect(store.recipes.get(recipeId)!.headVersion).toBe(2);
 
     await saveRecipeWithStore(
       store,
       makeInput({ recipeId, title: 'Updated variant', sourceRecipeId: null }),
     );
     expect(store.recipes.get(recipeId)!.sourceRecipeId).toBe(SOURCE_RECIPE_ID);
+    expect(
+      store.history.map((entry) => [entry.version, entry.changeKind]),
+    ).toEqual([
+      [1, 'variant_created'],
+      [2, 'manual_edit'],
+    ]);
   });
 
   it('tracks consecutive saves as ascending versions', async () => {

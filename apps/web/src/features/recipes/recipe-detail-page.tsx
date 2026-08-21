@@ -24,6 +24,7 @@ import { MAX_SERVINGS, scaleIngredients } from '@/domain/scaling.ts';
 import { getRecipeImageUrl } from '@/lib/recipe-images.ts';
 import { cn } from '@/lib/utils';
 import { RecipeConversation } from '@/features/recipe-conversation';
+import { RecipeHistoryPanel } from '@/features/recipe-history';
 import { AddToShoppingListDialog } from '@/features/shopping-list';
 
 import { useRecipeDetail, type RecipeDetail } from './recipe-queries.ts';
@@ -157,6 +158,16 @@ function ServingsScaler({
   );
 }
 
+function getDeleteDescription(recipe: RecipeDetail): string {
+  if (recipe.variantRecipes.length === 0) {
+    return `"${recipe.title}" will be permanently deleted.`;
+  }
+
+  const variantCount = recipe.variantRecipes.length;
+  const variantLabel = variantCount === 1 ? 'variant' : 'variants';
+  return `"${recipe.title}" will be permanently deleted. ${variantCount} ${variantLabel} currently linked to this recipe will become standalone recipes.`;
+}
+
 export function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -215,6 +226,8 @@ export function RecipeDetailPage() {
 
   const totalTime =
     (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
+  const hasRelationships =
+    recipe.sourceRecipe !== null || recipe.variantRecipes.length > 0;
 
   async function handleDelete() {
     if (!recipe) return;
@@ -246,6 +259,23 @@ export function RecipeDetailPage() {
           </h1>
           {recipe.description ? (
             <p className="mt-1 text-muted-foreground">{recipe.description}</p>
+          ) : null}
+          {hasRelationships ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {recipe.sourceRecipe ? (
+                <Badge asChild variant="outline">
+                  <Link to={`/recipes/${recipe.sourceRecipe.id}`}>
+                    Variant of {recipe.sourceRecipe.title}
+                  </Link>
+                </Badge>
+              ) : null}
+              {recipe.variantRecipes.length > 0 ? (
+                <Badge variant="secondary">
+                  {recipe.variantRecipes.length} variant
+                  {recipe.variantRecipes.length === 1 ? '' : 's'}
+                </Badge>
+              ) : null}
+            </div>
           ) : null}
           {recipe.tags.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -399,6 +429,49 @@ export function RecipeDetailPage() {
         </Card>
       ) : null}
 
+      {hasRelationships ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recipe family</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {recipe.sourceRecipe ? (
+              <div className="grid gap-1">
+                <p className="text-sm font-medium text-foreground">Based on</p>
+                <Link
+                  to={`/recipes/${recipe.sourceRecipe.id}`}
+                  className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
+                >
+                  {recipe.sourceRecipe.title}
+                </Link>
+              </div>
+            ) : null}
+            {recipe.variantRecipes.length > 0 ? (
+              <div className="grid gap-2">
+                <p className="text-sm font-medium text-foreground">Variants</p>
+                <ul className="grid gap-2">
+                  {recipe.variantRecipes.map((variant) => (
+                    <li key={variant.id}>
+                      <Link
+                        to={`/recipes/${variant.id}`}
+                        className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
+                      >
+                        {variant.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <RecipeHistoryPanel
+        recipeId={recipe.id}
+        onRestored={() => void refetch()}
+      />
+
       <RecipeConversation
         recipe={recipe}
         onRecipeChanged={() => void refetch()}
@@ -414,7 +487,7 @@ export function RecipeDetailPage() {
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
         title="Delete recipe?"
-        description={`"${recipe.title}" will be permanently deleted. Any variants will become standalone recipes.`}
+        description={getDeleteDescription(recipe)}
         confirmLabel="Delete"
         pending={isDeleting}
         onConfirm={() => void handleDelete()}

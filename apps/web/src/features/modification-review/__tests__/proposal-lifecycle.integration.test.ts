@@ -297,7 +297,7 @@ describeIntegration('modification proposal lifecycle (local Supabase)', () => {
     });
     createdRecipeIds.push(variant.recipeId);
 
-    expect(variant).toMatchObject({ headVersion: 1 });
+    expect(variant).toMatchObject({ headVersion: 2 });
     expect(variant.recipeId).not.toBe(sourceRecipeId);
     expect(await readProposalStatus(proposalId)).toBe('variant_created');
     expect(await readRecipe(sourceRecipeId)).toEqual(sourceBefore);
@@ -305,7 +305,7 @@ describeIntegration('modification proposal lifecycle (local Supabase)', () => {
       id: variant.recipeId,
       title: RESULT_TITLE,
       servings: resultingRecipe.servings,
-      head_version: 1,
+      head_version: 2,
       source_recipe_id: sourceRecipeId,
     });
 

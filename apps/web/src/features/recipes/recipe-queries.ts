@@ -22,6 +22,15 @@ export interface RecipeDetail {
   cookTimeMinutes: number | null;
   sourceName: string | null;
   sourceUrl: string | null;
+  sourceRecipeId: string | null;
+  sourceRecipe: {
+    id: string;
+    title: string;
+  } | null;
+  variantRecipes: {
+    id: string;
+    title: string;
+  }[];
   isFavorite: boolean;
   imagePath: string | null;
   ingredients: {
@@ -145,6 +154,42 @@ export function useRecipeDetail(recipeId: string | undefined) {
       const store = createSupabaseRecipeStore(supabase);
       const state = await store.getRecipeState(recipeId);
       if (!state) return null;
+      const sourceRecipeId = state.recipe.sourceRecipeId;
+      const [sourceRecipeResult, variantsResult] = await Promise.all([
+        sourceRecipeId
+          ? supabase
+              .from('recipes')
+              .select('id, title')
+              .eq('id', sourceRecipeId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        supabase
+          .from('recipes')
+          .select('id, title')
+          .eq('source_recipe_id', recipeId)
+          .order('title'),
+      ]);
+
+      if (sourceRecipeResult.error) {
+        throw new Error(
+          `Could not load source recipe details: ${sourceRecipeResult.error.message}`,
+        );
+      }
+      if (variantsResult.error) {
+        throw new Error(
+          `Could not load recipe variants: ${variantsResult.error.message}`,
+        );
+      }
+
+      const sourceRecipe = (sourceRecipeResult.data ?? null) as {
+        id: string;
+        title: string;
+      } | null;
+      const variantRecipes = (variantsResult.data ?? []) as {
+        id: string;
+        title: string;
+      }[];
+
       return {
         id: state.recipe.id,
         title: state.recipe.title,
@@ -154,6 +199,9 @@ export function useRecipeDetail(recipeId: string | undefined) {
         cookTimeMinutes: state.recipe.cookTimeMinutes,
         sourceName: state.recipe.sourceName,
         sourceUrl: state.recipe.sourceUrl,
+        sourceRecipeId,
+        sourceRecipe,
+        variantRecipes,
         isFavorite: state.recipe.isFavorite,
         imagePath: state.recipe.imagePath,
         ingredients: state.ingredients.map((ingredient) => ({

@@ -13,8 +13,12 @@ import {
  * serving adjustment, restore, variant creation — goes through `saveRecipe`,
  * which validates the draft against `recipeDraftSchema`, snapshots the
  * previous state into `recipe_history` (version = current head_version,
- * tagged with change_kind) and increments head_version. Creates write no
- * history. Restore funnels back through the same path with kind 'restore'.
+ * tagged with change_kind) and increments head_version. Ordinary creates
+ * start at head_version 1 with no history; variant creation additionally
+ * writes an initial version-1 snapshot then advances the live row to
+ * head_version 2 so the first independent edit can snapshot version 2
+ * without colliding on the unique (recipe_id, version) invariant. Restore
+ * funnels back through the same path with kind 'restore'.
  *
  * DB access sits behind the minimal `RecipeStore` interface so the domain
  * logic is unit-testable; `createSupabaseRecipeStore` adapts a real client.
@@ -259,17 +263,43 @@ export async function saveRecipeWithStore(
   } = parseInput(input);
 
   if (recipeId === null) {
-    const newId = await store.createRecipe({
+    const createFields = {
       ...draft,
       userId: userId!,
       imagePath: imagePath ?? null,
       sourceRecipeId,
       origin,
       isFavorite,
+    };
+    const newId = await store.createRecipe({
+      ...createFields,
     });
     await store.replaceIngredients(newId, toIngredientRows(draft.ingredients));
     await store.replaceSteps(newId, toStepRows(draft.steps));
     await store.syncTags(newId, userId!, draft.tags);
+    if (changeKind === 'variant_created') {
+      const created = await store.getRecipeState(newId);
+      if (created === null) throw new RecipeNotFoundError(newId);
+      await store.insertHistory({
+        recipeId: newId,
+        version: 1,
+        snapshot: buildSnapshot(created),
+        changeKind,
+      });
+      await store.updateRecipe(
+        newId,
+        1,
+        {
+          ...draft,
+          imagePath: imagePath ?? null,
+          sourceRecipeId,
+          origin,
+          isFavorite,
+        },
+        2,
+      );
+      return { recipeId: newId, headVersion: 2 };
+    }
     return { recipeId: newId, headVersion: 1 };
   }
 

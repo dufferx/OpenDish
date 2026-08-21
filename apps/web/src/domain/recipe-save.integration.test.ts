@@ -40,9 +40,11 @@ describeIntegration('recipe save path (local Supabase)', () => {
     supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    // Probe: migrations applied?
-    const probe = await supabase.from('recipes').select('id').limit(1);
-    schemaReady = !probe.error;
+    const probes = await Promise.all([
+      supabase.from('recipes').select('id').limit(1),
+      supabase.from('recipe_history').select('id').limit(1),
+    ]);
+    schemaReady = probes.every((probe) => !probe.error);
     if (!schemaReady) return;
     const { data, error } = await supabase.auth.admin.createUser({
       email: `recipe-save-test-${crypto.randomUUID()}@example.com`,
@@ -56,7 +58,7 @@ describeIntegration('recipe save path (local Supabase)', () => {
 
   afterAll(async () => {
     if (!schemaReady) return;
-    for (const id of createdRecipeIds) {
+    for (const id of [...createdRecipeIds].reverse()) {
       await supabase.from('recipes').delete().eq('id', id);
     }
     if (userId) await supabase.auth.admin.deleteUser(userId);
@@ -238,11 +240,15 @@ describeIntegration('recipe save path (local Supabase)', () => {
 
   it('rejects invalid drafts without writing anything', async (ctx) => {
     requireSchema(ctx);
-    await expect(saveRecipe(supabase, input({ title: '' }))).rejects.toThrow();
-    const { data } = await supabase
+    const { data: before } = await supabase
       .from('recipes')
       .select('id')
       .eq('user_id', userId);
-    expect(data).toHaveLength(createdRecipeIds.length);
+    await expect(saveRecipe(supabase, input({ title: '' }))).rejects.toThrow();
+    const { data: after } = await supabase
+      .from('recipes')
+      .select('id')
+      .eq('user_id', userId);
+    expect(after).toHaveLength(before?.length ?? 0);
   });
 });

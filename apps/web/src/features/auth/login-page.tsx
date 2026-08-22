@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -78,9 +77,17 @@ export function LoginPage() {
     return <Loading fullScreen label="Checking your session…" />;
   }
   if (auth.status === 'authenticated') {
+    // Only resume a remembered deep link for an existing account signing
+    // back in. A freshly created account must always land on '/': the
+    // router's `location.state.from` is scoped to the /login history entry,
+    // not to a particular identity, so it can otherwise still be set from a
+    // previous, different, now-signed-out session and would leak that
+    // account's route into a brand-new one created in the same tab.
     const from =
-      (location.state as { from?: { pathname?: string } } | null)?.from
-        ?.pathname ?? '/';
+      mode === 'sign-in'
+        ? ((location.state as { from?: { pathname?: string } } | null)?.from
+            ?.pathname ?? '/')
+        : '/';
     return <Navigate to={from} replace />;
   }
 
@@ -176,7 +183,7 @@ export function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-xl">OpenDish</CardTitle>
+          <h1 className="text-xl leading-snug font-medium">OpenDish</h1>
           <CardDescription>
             Sign in with email and password, or create an account for this
             installation.
@@ -185,7 +192,7 @@ export function LoginPage() {
         <CardContent className="space-y-5">
           <div
             className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1"
-            role="tablist"
+            role="group"
             aria-label="Authentication mode"
           >
             <Button

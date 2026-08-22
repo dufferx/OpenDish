@@ -93,13 +93,47 @@ For an installation-owned hosted Supabase project:
 pnpm supabase link --project-ref YOUR_PROJECT_REF
 pnpm supabase db push --linked --dry-run
 pnpm supabase db push --linked
+pnpm supabase functions deploy --project-ref YOUR_PROJECT_REF
 cp .env.example apps/web/.env.local
 pnpm dev
 ```
 
 Fill `apps/web/.env.local` with that project's URL and publishable key. The
 repository never stores a project ref, service-role key, OAuth secret, or AI
-credential for the managed profile.
+credential for the managed profile. Both profiles (local and managed) deploy
+the same frontend, migrations, and Edge Functions; only configuration differs.
+
+## AI provider configuration (BYOK)
+
+AI features (recipe chat, reviewed modifications, conversational generation,
+AI-assisted import) are optional and bring-your-own-key. Every other feature
+works with no AI provider configured.
+
+1. Sign in and open **Settings**.
+2. Paste an OpenAI API key, confirm the model (defaults to `gpt-4o-mini`), and
+   optionally set a Base URL for an OpenAI-compatible endpoint.
+3. Save. The `ai-configure` Edge Function validates the key against the
+   provider before marking the configuration `valid`, and stores the secret
+   in Supabase Vault — the key is write-only and is never returned to the
+   client again, in responses, or in logs.
+4. Any page that needs AI (chat, import, AI-create) shows a clear banner when
+   AI is unconfigured or the saved credentials need attention, and never
+   blocks non-AI recipe management.
+
+## Self-hosting support level
+
+- **Local Supabase CLI stack** (`pnpm setup:local`): a personal,
+  localhost-only development/evaluation profile. It has development
+  credentials and no production hardening (no public TLS, no operator-managed
+  backups). Do not expose it to the Internet or a LAN.
+- **Managed Supabase** (this README's "Managed Supabase setup"): the
+  currently supported production path — an installation-owned hosted
+  Supabase project plus an independently hosted static frontend.
+- **Permanent self-hosted deployment** on operator-owned infrastructure (a
+  version-pinned Supabase Docker Compose release with TLS, SMTP, backups, and
+  an upgrade/rollback runbook) is an advanced, explicitly maintained profile
+  that ships in a later phase (see `specs/001-ai-recipe-manager/tasks.md`,
+  Phase 13) and is not yet available.
 
 ## Product documentation
 

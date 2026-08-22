@@ -77,9 +77,17 @@ export function LoginPage() {
     return <Loading fullScreen label="Checking your session…" />;
   }
   if (auth.status === 'authenticated') {
+    // Only resume a remembered deep link for an existing account signing
+    // back in. A freshly created account must always land on '/': the
+    // router's `location.state.from` is scoped to the /login history entry,
+    // not to a particular identity, so it can otherwise still be set from a
+    // previous, different, now-signed-out session and would leak that
+    // account's route into a brand-new one created in the same tab.
     const from =
-      (location.state as { from?: { pathname?: string } } | null)?.from
-        ?.pathname ?? '/';
+      mode === 'sign-in'
+        ? ((location.state as { from?: { pathname?: string } } | null)?.from
+            ?.pathname ?? '/')
+        : '/';
     return <Navigate to={from} replace />;
   }
 

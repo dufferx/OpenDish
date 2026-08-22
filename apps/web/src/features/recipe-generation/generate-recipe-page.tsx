@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import {
   AiAvailabilityBanner,
@@ -162,115 +162,117 @@ export function GenerateRecipePage() {
   }
 
   return (
-    <Card aria-labelledby="generate-recipe-title">
-      <CardHeader>
-        <CardTitle
-          id="generate-recipe-title"
-          className="flex items-center gap-2"
-        >
-          <SparklesIcon className="size-5" aria-hidden />
-          Create with AI
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Describe what you want to cook. The AI may ask a clarifying question
-          before producing a recipe draft.
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        {showAiAvailabilityBanner ? (
-          <AiAvailabilityBanner
-            capability="generating recipes"
-            configuration={configuration}
-            isLoading={isAiConfigurationLoading}
-            error={aiConfigurationError}
-          />
-        ) : null}
-
-        {messages.length === 0 ? (
+    <section className="flex flex-col gap-6" aria-labelledby="generate-recipe-title">
+      <h1
+        id="generate-recipe-title"
+        className="flex items-center gap-2 text-2xl font-semibold tracking-tight"
+      >
+        <SparklesIcon className="size-6" aria-hidden />
+        Create with AI
+      </h1>
+      <Card>
+        <CardHeader>
           <p className="text-sm text-muted-foreground">
-            No messages yet. Describe the recipe you have in mind.
+            Describe what you want to cook. The AI may ask a clarifying
+            question before producing a recipe draft.
           </p>
-        ) : (
-          <ol aria-label="Conversation history" className="grid gap-3">
-            {messages.map((item) => (
-              <li
-                key={item.id}
-                className={
-                  item.role === 'assistant'
-                    ? 'rounded-xl border border-primary/30 bg-primary/5 p-3'
-                    : 'rounded-xl bg-muted p-3'
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          {showAiAvailabilityBanner ? (
+            <AiAvailabilityBanner
+              capability="generating recipes"
+              configuration={configuration}
+              isLoading={isAiConfigurationLoading}
+              error={aiConfigurationError}
+            />
+          ) : null}
+
+          {messages.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No messages yet. Describe the recipe you have in mind.
+            </p>
+          ) : (
+            <ol aria-label="Conversation history" className="grid gap-3">
+              {messages.map((item) => (
+                <li
+                  key={item.id}
+                  className={
+                    item.role === 'assistant'
+                      ? 'rounded-xl border border-primary/30 bg-primary/5 p-3'
+                      : 'rounded-xl bg-muted p-3'
+                  }
+                >
+                  <div className="mb-1 flex items-center gap-2 text-xs font-medium">
+                    {item.role === 'assistant' ? (
+                      <>
+                        <BotIcon className="size-4" aria-hidden />
+                        <span>AI response</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserIcon className="size-4" aria-hidden /> You
+                      </>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm">{item.content}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {error ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+            >
+              <p>{error}</p>
+              {shouldOfferSettings(error) ? (
+                <Button asChild variant="outline" size="sm" className="mt-2">
+                  <Link to="/settings">Open Settings</Link>
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <form
+            className="grid gap-3 border-t pt-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+          >
+            <label htmlFor="generate-message" className="text-sm font-medium">
+              Message
+            </label>
+            <Textarea
+              id="generate-message"
+              value={message}
+              maxLength={4000}
+              disabled={isSending || !canUseAi || isAiConfigurationLoading}
+              placeholder="e.g. A high-protein chicken dinner for two"
+              onChange={(event) => setMessage(event.target.value)}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="submit"
+                disabled={
+                  isSending ||
+                  !canUseAi ||
+                  isAiConfigurationLoading ||
+                  message.trim().length === 0
                 }
               >
-                <div className="mb-1 flex items-center gap-2 text-xs font-medium">
-                  {item.role === 'assistant' ? (
-                    <>
-                      <BotIcon className="size-4" aria-hidden />
-                      <span>AI response</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserIcon className="size-4" aria-hidden /> You
-                    </>
-                  )}
-                </div>
-                <p className="whitespace-pre-wrap text-sm">{item.content}</p>
-              </li>
-            ))}
-          </ol>
-        )}
-
-        {error ? (
-          <div
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
-          >
-            <p>{error}</p>
-            {shouldOfferSettings(error) ? (
-              <Button asChild variant="outline" size="sm" className="mt-2">
-                <Link to="/settings">Open Settings</Link>
+                {isSending ? 'Waiting for AI…' : 'Send'}
               </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <form
-          className="grid gap-3 border-t pt-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <label htmlFor="generate-message" className="text-sm font-medium">
-            Message
-          </label>
-          <Textarea
-            id="generate-message"
-            value={message}
-            maxLength={4000}
-            disabled={isSending || !canUseAi || isAiConfigurationLoading}
-            placeholder="e.g. A high-protein chicken dinner for two"
-            onChange={(event) => setMessage(event.target.value)}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="submit"
-              disabled={
-                isSending ||
-                !canUseAi ||
-                isAiConfigurationLoading ||
-                message.trim().length === 0
-              }
-            >
-              {isSending ? 'Waiting for AI…' : 'Send'}
-            </Button>
-            {isSending ? (
-              <Button type="button" variant="outline" onClick={cancelRequest}>
-                <XIcon className="size-4" aria-hidden /> Cancel request
-              </Button>
-            ) : null}
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+              {isSending ? (
+                <Button type="button" variant="outline" onClick={cancelRequest}>
+                  <XIcon className="size-4" aria-hidden /> Cancel request
+                </Button>
+              ) : null}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </section>
   );
 }

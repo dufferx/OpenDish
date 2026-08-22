@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -176,7 +175,7 @@ export function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-xl">OpenDish</CardTitle>
+          <h1 className="text-xl leading-snug font-medium">OpenDish</h1>
           <CardDescription>
             Sign in with email and password, or create an account for this
             installation.

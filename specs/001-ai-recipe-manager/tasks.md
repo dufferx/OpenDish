@@ -286,11 +286,11 @@ description: "Task list for 001-ai-recipe-manager"
 
 **Purpose**: Quality gates and release readiness across all stories
 
-- [ ] T074 [P] E2E: SC-001 primary flow (create/import → save → chat → modify → apply/variant → servings → shopping list) in `tests/e2e/primary-flow.spec.ts`
-- [ ] T075 [P] E2E: SC-002 generation flow + portable Auth (unauthenticated redirect, email/password session, optional Google provider when configured, and cross-user data isolation) in `tests/e2e/`
-- [ ] T076 [P] Accessibility pass: keyboard navigation, semantic elements, contrast, focus states across all pages
-- [ ] T077 [P] Responsive/mobile pass on all flows (recipe view, editor, chat, review, shopping list)
-- [ ] T078 Write `README.md`: choose local or managed setup, `.env.example` reference, optional Google OAuth, AI provider configuration, deployment overview, self-hosting support level, and architecture links into `specs/001-ai-recipe-manager/`
+- [x] T074 [P] E2E: SC-001 primary flow (create/import → save → chat → modify → apply/variant → servings → shopping list) in `tests/e2e/primary-flow.spec.ts`
+- [x] T075 [P] E2E: SC-002 generation flow + portable Auth (unauthenticated redirect, email/password session, optional Google provider when configured, and cross-user data isolation) in `tests/e2e/`
+- [x] T076 [P] Accessibility pass: keyboard navigation, semantic elements, contrast, focus states across all pages
+- [x] T077 [P] Responsive/mobile pass on all flows (recipe view, editor, chat, review, shopping list)
+- [x] T078 Write `README.md`: choose local or managed setup, `.env.example` reference, optional Google OAuth, AI provider configuration, deployment overview, self-hosting support level, and architecture links into `specs/001-ai-recipe-manager/`
 - [ ] T079 Security review sweep: no secrets in repo/logs/errors, RLS on every table, SSRF guards active, storage policies verified (constitution IX, XXV)
 - [ ] T080 Run full quality gate: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, clean local database rebuild, and `verify:local` — then validate both supported `quickstart.md` paths from scratch
 

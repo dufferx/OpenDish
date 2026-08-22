@@ -293,6 +293,7 @@ description: "Task list for 001-ai-recipe-manager"
 - [x] T078 Write `README.md`: choose local or managed setup, `.env.example` reference, optional Google OAuth, AI provider configuration, deployment overview, self-hosting support level, and architecture links into `specs/001-ai-recipe-manager/`
 - [x] T079 Security review sweep: no secrets in repo/logs/errors, RLS on every table, SSRF guards active, storage policies verified (constitution IX, XXV)
 - [ ] T080 Run full quality gate: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, clean local database rebuild, and `verify:local` — then validate both supported `quickstart.md` paths from scratch
+  <!-- Verified in this environment: pnpm lint, pnpm typecheck, pnpm test, pnpm test:e2e (6/6), pnpm build, a clean local database rebuild + full `pnpm verify:local` (lint+typecheck+test+pgTAP+live Edge Function smoke suite), and quickstart.md Path A (fully local) end to end. NOT verified: quickstart.md Path B (managed Supabase) — this sandbox has no operator-owned Supabase Cloud project, CLI authentication, or database password to link against, so that path cannot be exercised for real here. Leaving unchecked until Path B is validated against an actual managed project. -->
 
 **Checkpoint**: Feature-complete OpenDish is green, secure, responsive, and reproducible before any public deployment workflow is promoted
 

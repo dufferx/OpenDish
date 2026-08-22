@@ -20,7 +20,7 @@ export async function signUp(
 ): Promise<void> {
   await page.goto('/login')
   await page
-    .getByRole('tablist', { name: 'Authentication mode' })
+    .getByRole('group', { name: 'Authentication mode' })
     .getByRole('button', { name: 'Create account' })
     .click()
 

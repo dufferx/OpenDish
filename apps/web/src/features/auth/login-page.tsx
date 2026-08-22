@@ -192,7 +192,7 @@ export function LoginPage() {
         <CardContent className="space-y-5">
           <div
             className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1"
-            role="tablist"
+            role="group"
             aria-label="Authentication mode"
           >
             <Button

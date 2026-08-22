@@ -100,7 +100,7 @@ describe('LoginPage', () => {
 
     renderLoginPage();
     const user = userEvent.setup();
-    const tablist = await screen.findByRole('tablist', {
+    const tablist = await screen.findByRole('group', {
       name: 'Authentication mode',
     });
 
@@ -209,7 +209,7 @@ describe('LoginPage', () => {
 
     renderLoginPage();
     const user = userEvent.setup();
-    const tablist = await screen.findByRole('tablist', {
+    const tablist = await screen.findByRole('group', {
       name: 'Authentication mode',
     });
 
@@ -282,7 +282,7 @@ describe('LoginPage', () => {
 
     renderLoginPage();
     const user = userEvent.setup();
-    const tablist = await screen.findByRole('tablist', {
+    const tablist = await screen.findByRole('group', {
       name: 'Authentication mode',
     });
 

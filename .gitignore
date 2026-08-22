@@ -10,6 +10,10 @@ dist/
 .env.local
 **/.env
 **/.env.local
+# Backups written by `pnpm setup:local -- --backup-managed-env` before it
+# overwrites an existing managed-profile `.env.local`; these can contain a
+# managed Supabase URL/publishable key and must never be committed.
+**/.env.local.managed-backup-*
 !**/.env.example
 
 # Supabase local

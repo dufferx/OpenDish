@@ -291,7 +291,7 @@ description: "Task list for 001-ai-recipe-manager"
 - [x] T076 [P] Accessibility pass: keyboard navigation, semantic elements, contrast, focus states across all pages
 - [x] T077 [P] Responsive/mobile pass on all flows (recipe view, editor, chat, review, shopping list)
 - [x] T078 Write `README.md`: choose local or managed setup, `.env.example` reference, optional Google OAuth, AI provider configuration, deployment overview, self-hosting support level, and architecture links into `specs/001-ai-recipe-manager/`
-- [ ] T079 Security review sweep: no secrets in repo/logs/errors, RLS on every table, SSRF guards active, storage policies verified (constitution IX, XXV)
+- [x] T079 Security review sweep: no secrets in repo/logs/errors, RLS on every table, SSRF guards active, storage policies verified (constitution IX, XXV)
 - [ ] T080 Run full quality gate: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, clean local database rebuild, and `verify:local` — then validate both supported `quickstart.md` paths from scratch
 
 **Checkpoint**: Feature-complete OpenDish is green, secure, responsive, and reproducible before any public deployment workflow is promoted

@@ -248,7 +248,10 @@ export function RecipeDetailPage() {
   }
 
   return (
-    <section className="flex flex-col gap-6" aria-labelledby="recipe-title">
+    <section
+      className="flex flex-col gap-6 pb-20"
+      aria-labelledby="recipe-title"
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1
@@ -339,138 +342,147 @@ export function RecipeDetailPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-        {(recipe.prepTimeMinutes !== null || recipe.cookTimeMinutes !== null) &&
-        totalTime > 0 ? (
-          <div className="flex items-center gap-1.5">
-            <ClockIcon className="size-4" />
-            <span>
-              {totalTime} min
-              {recipe.prepTimeMinutes !== null &&
-              recipe.cookTimeMinutes !== null
-                ? ` (${recipe.prepTimeMinutes} prep + ${recipe.cookTimeMinutes} cook)`
-                : ''}
-            </span>
+      <div className="grid gap-6">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+            {(recipe.prepTimeMinutes !== null ||
+              recipe.cookTimeMinutes !== null) &&
+            totalTime > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <ClockIcon className="size-4" />
+                <span>
+                  {totalTime} min
+                  {recipe.prepTimeMinutes !== null &&
+                  recipe.cookTimeMinutes !== null
+                    ? ` (${recipe.prepTimeMinutes} prep + ${recipe.cookTimeMinutes} cook)`
+                    : ''}
+                </span>
+              </div>
+            ) : null}
+            <div className="flex items-center gap-1.5">
+              <UsersIcon className="size-4" />
+              <span>
+                {recipe.servings} saved serving
+                {recipe.servings === 1 ? '' : 's'}
+              </span>
+            </div>
           </div>
-        ) : null}
-        <div className="flex items-center gap-1.5">
-          <UsersIcon className="size-4" />
-          <span>
-            {recipe.servings} saved serving
-            {recipe.servings === 1 ? '' : 's'}
-          </span>
+
+          <ServingsScaler
+            key={`${recipe.id}:${recipe.headVersion}`}
+            recipe={recipe}
+            onSave={saveServingAdjustment}
+            isSaving={isSavingServingAdjustment}
+          />
+
+          {recipe.imagePath ? (
+            <div className="overflow-hidden rounded-xl bg-muted">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={recipe.title}
+                  className="w-full max-h-96 object-cover"
+                />
+              ) : (
+                <div className="flex h-48 items-center justify-center text-muted-foreground">
+                  <ImageIcon className="size-8" />
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Steps</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="grid gap-4">
+                {recipe.steps.map((step, index) => (
+                  <li key={index} className="flex gap-3">
+                    <span
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium"
+                      aria-hidden
+                    >
+                      {index + 1}
+                    </span>
+                    <p className="text-foreground">{step.text}</p>
+                  </li>
+                ))}
+              </ol>
+            </CardContent>
+          </Card>
+
+          {recipe.sourceUrl || recipe.sourceName ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Source</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {recipe.sourceUrl ? (
+                  <a
+                    href={recipe.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                  >
+                    {recipe.sourceName || recipe.sourceUrl}
+                    <ExternalLinkIcon className="size-4" />
+                  </a>
+                ) : (
+                  <p className="text-muted-foreground">{recipe.sourceName}</p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {hasRelationships ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Recipe family</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                {recipe.sourceRecipe ? (
+                  <div className="grid gap-1">
+                    <p className="text-sm font-medium text-foreground">
+                      Based on
+                    </p>
+                    <Link
+                      to={`/recipes/${recipe.sourceRecipe.id}`}
+                      className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
+                    >
+                      {recipe.sourceRecipe.title}
+                    </Link>
+                  </div>
+                ) : null}
+                {recipe.variantRecipes.length > 0 ? (
+                  <div className="grid gap-2">
+                    <p className="text-sm font-medium text-foreground">
+                      Variants
+                    </p>
+                    <ul className="grid gap-2">
+                      {recipe.variantRecipes.map((variant) => (
+                        <li key={variant.id}>
+                          <Link
+                            to={`/recipes/${variant.id}`}
+                            className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
+                          >
+                            {variant.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <RecipeHistoryPanel
+            recipeId={recipe.id}
+            onRestored={() => void refetch()}
+          />
         </div>
       </div>
-
-      <ServingsScaler
-        key={`${recipe.id}:${recipe.headVersion}`}
-        recipe={recipe}
-        onSave={saveServingAdjustment}
-        isSaving={isSavingServingAdjustment}
-      />
-
-      {recipe.imagePath ? (
-        <div className="overflow-hidden rounded-xl bg-muted">
-          {imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={recipe.title}
-              className="w-full max-h-96 object-cover"
-            />
-          ) : (
-            <div className="flex h-48 items-center justify-center text-muted-foreground">
-              <ImageIcon className="size-8" />
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Steps</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ol className="grid gap-4">
-            {recipe.steps.map((step, index) => (
-              <li key={index} className="flex gap-3">
-                <span
-                  className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium"
-                  aria-hidden
-                >
-                  {index + 1}
-                </span>
-                <p className="text-foreground">{step.text}</p>
-              </li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
-
-      {recipe.sourceUrl || recipe.sourceName ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Source</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recipe.sourceUrl ? (
-              <a
-                href={recipe.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-primary hover:underline"
-              >
-                {recipe.sourceName || recipe.sourceUrl}
-                <ExternalLinkIcon className="size-4" />
-              </a>
-            ) : (
-              <p className="text-muted-foreground">{recipe.sourceName}</p>
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {hasRelationships ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recipe family</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            {recipe.sourceRecipe ? (
-              <div className="grid gap-1">
-                <p className="text-sm font-medium text-foreground">Based on</p>
-                <Link
-                  to={`/recipes/${recipe.sourceRecipe.id}`}
-                  className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
-                >
-                  {recipe.sourceRecipe.title}
-                </Link>
-              </div>
-            ) : null}
-            {recipe.variantRecipes.length > 0 ? (
-              <div className="grid gap-2">
-                <p className="text-sm font-medium text-foreground">Variants</p>
-                <ul className="grid gap-2">
-                  {recipe.variantRecipes.map((variant) => (
-                    <li key={variant.id}>
-                      <Link
-                        to={`/recipes/${variant.id}`}
-                        className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
-                      >
-                        {variant.title}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <RecipeHistoryPanel
-        recipeId={recipe.id}
-        onRestored={() => void refetch()}
-      />
 
       <RecipeConversation
         recipe={recipe}

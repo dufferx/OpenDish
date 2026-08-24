@@ -92,6 +92,23 @@ describe('LoginPage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('uses a softly rounded square treatment for the login mascot', async () => {
+    renderLoginPage();
+
+    await screen.findByRole('heading', { name: 'OpenDish' });
+    const mascot = document.querySelector('img[src$="mascot.jpg"]');
+    expect(mascot).toHaveClass('rounded-xl');
+    expect(mascot).not.toHaveClass('rounded-full');
+  });
+
+  it('keeps the desktop prompt area free of a duplicate mascot', async () => {
+    renderLoginPage();
+
+    await screen.findByRole('heading', { name: 'OpenDish' });
+    expect(document.querySelector('.od-hero-mascot')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.od-hero-prompts > *')).toHaveLength(3);
+  });
+
   it('supports account creation and shows confirmation guidance when email verification is required', async () => {
     signUpMock.mockResolvedValue({
       data: { user: { id: 'user-1' }, session: null },
@@ -316,5 +333,93 @@ describe('LoginPage', () => {
     expect(
       await screen.findByText(/Check your email for the confirmation link/i),
     ).toBeInTheDocument();
+  });
+
+  it('shows the Google brand mark on the OAuth action only when it is enabled (T103)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ external: { google: true } }),
+      }),
+    );
+
+    renderLoginPage();
+
+    const googleButton = await screen.findByRole('button', {
+      name: 'Continue with Google',
+    });
+    expect(googleButton.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('gives the active authentication mode an unmistakable, semantic selected state (T104)', async () => {
+    renderLoginPage();
+    const user = userEvent.setup();
+    const tablist = await screen.findByRole('group', {
+      name: 'Authentication mode',
+    });
+    const signInButton = within(tablist).getByRole('button', {
+      name: 'Sign in',
+    });
+    const createAccountButton = within(tablist).getByRole('button', {
+      name: 'Create account',
+    });
+
+    expect(signInButton).toHaveAttribute('aria-pressed', 'true');
+    expect(signInButton).toHaveAttribute('data-variant', 'default');
+    expect(createAccountButton).toHaveAttribute('aria-pressed', 'false');
+    expect(createAccountButton).toHaveAttribute('data-variant', 'ghost');
+
+    await user.click(createAccountButton);
+
+    expect(createAccountButton).toHaveAttribute('aria-pressed', 'true');
+    expect(createAccountButton).toHaveAttribute('data-variant', 'default');
+    expect(signInButton).toHaveAttribute('aria-pressed', 'false');
+    expect(signInButton).toHaveAttribute('data-variant', 'ghost');
+  });
+
+  it('lets the user reveal and re-hide the password without clearing or submitting (T105)', async () => {
+    renderLoginPage();
+    const user = userEvent.setup();
+    await screen.findByRole('form', { name: 'Email sign in form' });
+
+    const passwordInput = screen.getByLabelText('Password');
+    await user.type(passwordInput, 'secret-password');
+    expect(passwordInput).toHaveAttribute('type', 'password');
+
+    const showButton = screen.getByRole('button', { name: 'Show password' });
+    await user.click(showButton);
+
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(passwordInput).toHaveValue('secret-password');
+    expect(signInWithPasswordMock).not.toHaveBeenCalled();
+
+    const hideButton = screen.getByRole('button', { name: 'Hide password' });
+    await user.click(hideButton);
+    expect(passwordInput).toHaveAttribute('type', 'password');
+  });
+
+  it('supports independent password visibility toggles in create-account mode (T105)', async () => {
+    renderLoginPage();
+    const user = userEvent.setup();
+    const tablist = await screen.findByRole('group', {
+      name: 'Authentication mode',
+    });
+    await user.click(
+      within(tablist).getByRole('button', { name: 'Create account' }),
+    );
+    await screen.findByRole('form', { name: 'Create account form' });
+
+    const passwordInput = screen.getByLabelText('Password');
+    const confirmInput = screen.getByLabelText('Confirm password');
+
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(confirmInput).toHaveAttribute('type', 'password');
+
+    await user.click(
+      screen.getByRole('button', { name: 'Show confirm password' }),
+    );
+    expect(confirmInput).toHaveAttribute('type', 'text');
   });
 });

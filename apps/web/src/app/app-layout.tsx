@@ -1,7 +1,9 @@
+import { UserIcon } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 
 import { NAV_ITEMS } from '@/app/nav-items';
-import { SignOutButton } from '@/features/auth/sign-out-button';
+import mascotImage from '@/assets/mascot.jpg';
+import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/lib/utils';
 
 interface PrimaryNavProps {
@@ -47,6 +49,32 @@ export function PrimaryNav({ variant }: PrimaryNavProps) {
   );
 }
 
+/** T102: a recognizable account entry point in the header that opens
+ * Settings. Falls back to a generic user icon until profile settings (and a
+ * real avatar photo) exist; the accessible name never depends on the
+ * initials/photo alone. */
+function UserAvatarLink() {
+  const auth = useAuth();
+  const email =
+    auth.status === 'authenticated' ? (auth.session.user.email ?? null) : null;
+  const initial = email ? email.trim().charAt(0).toUpperCase() : null;
+
+  return (
+    <Link
+      to="/settings"
+      aria-label="Open Settings"
+      title="Settings"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/20 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+    >
+      {initial ? (
+        <span aria-hidden="true">{initial}</span>
+      ) : (
+        <UserIcon className="size-4" aria-hidden="true" />
+      )}
+    </Link>
+  );
+}
+
 export function AppLayout() {
   return (
     <div className="flex min-h-screen flex-col">
@@ -58,13 +86,24 @@ export function AppLayout() {
       </a>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4">
-          <Link to="/" className="text-lg font-semibold tracking-tight">
-            OpenDish
+          <Link
+            to="/"
+            className="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight"
+          >
+            <img
+              src={mascotImage}
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 shrink-0 rounded-md bg-muted object-cover"
+            />
+            <span className="hidden sm:inline">OpenDish</span>
+            <span className="sr-only sm:hidden">OpenDish</span>
           </Link>
           <div className="hidden md:block">
             <PrimaryNav variant="top" />
           </div>
-          <SignOutButton />
+          <UserAvatarLink />
         </div>
       </header>
 

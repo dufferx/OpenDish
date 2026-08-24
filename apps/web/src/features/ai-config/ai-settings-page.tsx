@@ -7,15 +7,25 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useAuth } from '@/features/auth/auth-context';
+import { SignOutButton } from '@/features/auth/sign-out-button';
 
 import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_MODEL,
   DEFAULT_AI_PROVIDER,
+  SUPPORTED_AI_MODELS,
   removeAiConfiguration,
   upsertAiConfiguration,
+  type SupportedAiModelOption,
 } from './ai-config-api.ts';
-import { AiAvailabilityBanner } from './ai-availability-banner.tsx';
 import { useAiConfigurationStatus } from './use-ai-configuration-status.ts';
 
 interface FeedbackState {
@@ -66,6 +76,7 @@ function isValidOptionalUrl(value: string): boolean {
 }
 
 export function AiSettingsPage() {
+  const auth = useAuth();
   const { configuration, isLoading, error, refresh } =
     useAiConfigurationStatus();
   const [apiKey, setApiKey] = useState('');
@@ -78,9 +89,50 @@ export function AiSettingsPage() {
   const [modelTouched, setModelTouched] = useState(false);
   const [baseUrlTouched, setBaseUrlTouched] = useState(false);
 
+  // T101: the model is always chosen from a controlled list. A previously
+  // saved model that has since fallen off the supported list (an
+  // "unavailable model") is still surfaced as its own selectable option so
+  // the saved value stays visibly selected instead of silently disappearing.
+  // This extra option is tracked as its own piece of state — committed in
+  // its own render, ahead of the render that changes the Select's value —
+  // so the option exists before Radix's Select needs to display it as
+  // selected.
+  const [extraModelOption, setExtraModelOption] =
+    useState<SupportedAiModelOption | null>(null);
+
+  useEffect(() => {
+    if (!configuration?.configured) {
+      setExtraModelOption(null);
+      return;
+    }
+    const known = SUPPORTED_AI_MODELS.some(
+      (option) => option.value === configuration.model,
+    );
+    setExtraModelOption(
+      known
+        ? null
+        : {
+            value: configuration.model,
+            label: `${configuration.model} (no longer offered)`,
+          },
+    );
+  }, [configuration]);
+
+  const modelOptions = useMemo(
+    () =>
+      extraModelOption
+        ? [...SUPPORTED_AI_MODELS, extraModelOption]
+        : SUPPORTED_AI_MODELS,
+    [extraModelOption],
+  );
+
   useEffect(() => {
     if (configuration?.configured) {
-      if (!modelTouched) setModel(configuration.model);
+      const known = SUPPORTED_AI_MODELS.some(
+        (option) => option.value === configuration.model,
+      );
+      const optionReady = known || extraModelOption?.value === configuration.model;
+      if (!modelTouched && optionReady) setModel(configuration.model);
       if (!baseUrlTouched) {
         setBaseUrl(configuration.baseUrl ?? DEFAULT_AI_BASE_URL);
       }
@@ -91,7 +143,10 @@ export function AiSettingsPage() {
       if (!modelTouched) setModel(DEFAULT_AI_MODEL);
       if (!baseUrlTouched) setBaseUrl('');
     }
-  }, [baseUrlTouched, configuration, modelTouched]);
+  }, [baseUrlTouched, configuration, extraModelOption, modelTouched]);
+
+  const isUnsupportedSavedModel =
+    extraModelOption !== null && extraModelOption.value === model;
 
   const formError = useMemo(() => {
     if (apiKey.trim() === '' && isSubmitting) {
@@ -202,6 +257,8 @@ export function AiSettingsPage() {
 
   const canRemove = configuration?.configured === true;
   const isBusy = isSubmitting || isRemoving;
+  const accountEmail =
+    auth.status === 'authenticated' ? (auth.session.user.email ?? null) : null;
 
   return (
     <section className="grid gap-6" aria-labelledby="ai-settings-title">
@@ -211,7 +268,7 @@ export function AiSettingsPage() {
           className="flex items-center gap-2 text-2xl font-semibold tracking-tight"
         >
           <KeyRoundIcon className="size-6" aria-hidden />
-          AI Settings
+          Settings
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Bring your own OpenAI API key for recipe generation, recipe import,
@@ -220,12 +277,17 @@ export function AiSettingsPage() {
         </p>
       </header>
 
-      <AiAvailabilityBanner
-        capability="AI-powered recipe tools"
-        configuration={configuration}
-        isLoading={isLoading}
-        error={error}
-      />
+      <Card>
+        <CardHeader className="gap-1">
+          <CardTitle>Account</CardTitle>
+          {accountEmail ? (
+            <p className="text-sm text-muted-foreground">{accountEmail}</p>
+          ) : null}
+        </CardHeader>
+        <CardContent>
+          <SignOutButton />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="gap-3">
@@ -346,15 +408,32 @@ export function AiSettingsPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="ai-model">Model</Label>
-              <Input
-                id="ai-model"
+              <Select
                 value={model}
-                onChange={(event) => {
-                  setModel(event.target.value);
+                onValueChange={(value) => {
+                  setModel(value);
                   setModelTouched(true);
                 }}
                 disabled={isBusy}
-              />
+              >
+                <SelectTrigger id="ai-model" className="h-10 w-full sm:w-72">
+                  <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isUnsupportedSavedModel ? (
+                <p className="text-sm text-muted-foreground">
+                  This model is no longer in the supported list, but stays
+                  selected because it is already saved. Choose another model
+                  to update it.
+                </p>
+              ) : null}
             </div>
 
             <div className="grid gap-2">

@@ -6,7 +6,6 @@ import type {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatQuantity } from '@/domain/rational.ts';
 
 export type ProposalAction = 'apply' | 'variant' | 'discard' | 'regenerate';
@@ -63,8 +62,8 @@ function RecipeComparison({
       aria-label={label}
       className={
         suggested
-          ? 'rounded-xl border border-primary/40 bg-primary/5 p-4'
-          : 'rounded-xl border bg-muted/30 p-4'
+          ? 'rounded-xl border border-foreground/25 bg-foreground/[0.03] p-3'
+          : 'rounded-xl border bg-muted/25 p-3'
       }
     >
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -111,30 +110,41 @@ export function ModificationReview({
   const actionPending = pendingAction !== null;
 
   return (
-    <Card className="border-primary/30">
-      <CardHeader className="gap-3">
+    <article className="overflow-hidden rounded-2xl rounded-tl-md border bg-background shadow-sm">
+      <div className="grid gap-3 border-b bg-muted/20 p-4">
         <div
           role="status"
-          className="w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+          className="w-fit rounded-full bg-foreground px-2.5 py-1 text-[0.68rem] font-medium tracking-wide text-background uppercase"
         >
           AI suggestion · not applied
         </div>
-        <CardTitle>Review proposed changes</CardTitle>
+        <h3 className="text-base font-semibold">Review proposed changes</h3>
         <p className="text-sm text-muted-foreground">{proposal.summary}</p>
-      </CardHeader>
-      <CardContent className="grid gap-5">
+      </div>
+      <div className="grid gap-4 p-4">
         <section aria-labelledby="changes-summary">
-          <h3 id="changes-summary" className="text-sm font-semibold">
+          <h4
+            id="changes-summary"
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          >
             Changes
-          </h3>
-          <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
+          </h4>
+          <ul className="mt-2 grid gap-1.5 text-sm">
             {proposal.operations.map((operation, index) => (
-              <li key={index}>{operationLabel(operation, currentRecipe)}</li>
+              <li
+                key={index}
+                className="flex gap-2 rounded-lg bg-muted/60 px-3 py-2"
+              >
+                <span aria-hidden className="font-medium">
+                  ±
+                </span>
+                <span>{operationLabel(operation, currentRecipe)}</span>
+              </li>
             ))}
           </ul>
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <RecipeComparison
             recipe={currentRecipe}
             label="Current saved recipe"
@@ -160,14 +170,15 @@ export function ModificationReview({
         <div
           role="group"
           aria-label="Proposal actions"
-          className="flex flex-wrap gap-2"
+          className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"
         >
           <Button
             type="button"
+            aria-label="Apply"
             disabled={actionPending || isStale}
             onClick={() => void onApply()}
           >
-            {pendingAction === 'apply' ? 'Applying…' : 'Apply'}
+            {pendingAction === 'apply' ? 'Applying…' : 'Apply changes'}
           </Button>
           <Button
             type="button"
@@ -200,7 +211,7 @@ export function ModificationReview({
             Regenerate suggestion
           </Button>
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 }

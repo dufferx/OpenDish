@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { makeQuantity } from '@opendish/contracts';
 import { MemoryRouter } from 'react-router-dom';
@@ -11,6 +11,7 @@ const togglePurchased = vi.fn();
 const updateItem = vi.fn();
 const deleteItem = vi.fn();
 const addManualItem = vi.fn();
+let togglingItemId: string | null = null;
 
 vi.mock('@/features/shopping-list/shopping-list-queries.ts', () => ({
   useShoppingListItems: vi.fn(),
@@ -20,7 +21,8 @@ vi.mock('@/features/shopping-list/shopping-list-queries.ts', () => ({
     deleteItem,
     addManualItem,
     addRecipe: vi.fn(),
-    isToggling: false,
+    isToggling: togglingItemId !== null,
+    togglingItemId,
     isUpdating: false,
     isDeleting: false,
     isAddingManual: false,
@@ -67,6 +69,7 @@ function renderPage(items: ShoppingListItem[] = [], isLoading = false) {
 describe('ShoppingListPage (T065)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    togglingItemId = null;
     togglePurchased.mockResolvedValue(undefined);
     updateItem.mockResolvedValue(undefined);
     deleteItem.mockResolvedValue(undefined);
@@ -211,5 +214,55 @@ describe('ShoppingListPage (T065)', () => {
 
     const link = screen.getByRole('link', { name: /from pancakes/i });
     expect(link).toHaveAttribute('href', '/recipes/recipe-1');
+  });
+
+  it('shows a distinct pending treatment only for the row being saved (T107)', () => {
+    togglingItemId = 'a';
+    renderPage([
+      item({ id: 'a', name: 'Milk', isPurchased: false }),
+      item({ id: 'b', name: 'Eggs', isPurchased: false }),
+    ]);
+
+    const milkRow = screen.getByText('Milk').closest('li');
+    const eggsRow = screen.getByText('Eggs').closest('li');
+    expect(milkRow).not.toBeNull();
+    expect(eggsRow).not.toBeNull();
+
+    expect(
+      milkRow ? within(milkRow).getByRole('status') : null,
+    ).toHaveTextContent(/saving/i);
+    expect(
+      eggsRow ? within(eggsRow).queryByRole('status') : 'missing',
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', { name: /mark milk as purchased/i }),
+    ).toBeDisabled();
+  });
+
+  it('gives a purchased item a visible checkmark treatment in addition to the checked state (T107)', () => {
+    renderPage([item({ id: 'a', name: 'Milk', isPurchased: true })]);
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: /mark milk as not purchased/i,
+    });
+    expect(checkbox).toBeChecked();
+    const row = screen.getByText('Milk').closest('li');
+    expect(row).not.toBeNull();
+    expect(row?.querySelector('svg.lucide-check')).toBeInTheDocument();
+  });
+
+  it('keeps a purchased item undoable by toggling the checkbox again', async () => {
+    const user = userEvent.setup();
+    renderPage([item({ id: 'a', name: 'Milk', isPurchased: true })]);
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: /mark milk as not purchased/i,
+    });
+    await user.click(checkbox);
+
+    expect(togglePurchased).toHaveBeenCalledWith({
+      id: 'a',
+      isPurchased: false,
+    });
   });
 });

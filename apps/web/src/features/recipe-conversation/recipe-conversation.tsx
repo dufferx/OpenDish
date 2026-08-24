@@ -5,14 +5,29 @@ import {
   type ModificationProposal,
   type RecipeDraft,
 } from '@opendish/contracts';
-import { BotIcon, MessageCircleIcon, UserIcon, XIcon } from 'lucide-react';
+import {
+  ArrowUpIcon,
+  MessageCircleIcon,
+  SparklesIcon,
+  UserIcon,
+  XIcon,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
 import { Textarea } from '@/components/ui/textarea';
+import mascotImage from '@/assets/mascot.jpg';
 import {
   AiAvailabilityBanner,
   type AiConfiguration,
@@ -54,6 +69,15 @@ interface FunctionPayload {
   kind?: unknown;
   content?: unknown;
 }
+
+const STARTER_PROMPTS: Array<{
+  label: string;
+  intent: ConversationIntent;
+}> = [
+  { label: 'What can I substitute?', intent: 'answer' },
+  { label: 'Explain a difficult step', intent: 'answer' },
+  { label: 'Make it vegetarian', intent: 'modification' },
+];
 
 function asRecipeDraft(recipe: RecipeDetail): RecipeDraft {
   return {
@@ -156,6 +180,7 @@ export function RecipeConversation({
   } = useAiConfigurationStatus();
   const navigate = useNavigate();
   const currentRecipe = useMemo(() => asRecipeDraft(recipe), [recipe]);
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [proposal, setProposal] = useState<ReviewableProposal | null>(null);
   const [intent, setIntent] = useState<ConversationIntent>('answer');
@@ -167,6 +192,7 @@ export function RecipeConversation({
   );
   const [error, setError] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const canUseAi =
     !aiConfigurationError && hasValidAiConfiguration(configuration);
   const showAiAvailabilityBanner =
@@ -286,6 +312,12 @@ export function RecipeConversation({
     },
     [],
   );
+
+  useEffect(() => {
+    if (open) {
+      conversationEndRef.current?.scrollIntoView({ block: 'end' });
+    }
+  }, [isSending, messages, open, proposal]);
 
   async function invokeConversation() {
     const trimmed = message.trim();
@@ -426,175 +458,343 @@ export function RecipeConversation({
   const interactionPending = isSending || pendingAction !== null;
 
   return (
-    <Card aria-labelledby="recipe-assistant-title">
-      <CardHeader>
-        <CardTitle
-          id="recipe-assistant-title"
-          className="flex items-center gap-2"
-        >
-          <MessageCircleIcon className="size-5" aria-hidden />
-          Recipe assistant
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Ask about this recipe or request a reviewed suggestion. AI never
-          changes your saved recipe until you explicitly apply it.
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        {showAiAvailabilityBanner ? (
-          <AiAvailabilityBanner
-            capability="recipe assistance"
-            configuration={configuration}
-            isLoading={isAiConfigurationLoading}
-            error={aiConfigurationError}
+    <Drawer open={open} onOpenChange={setOpen} fixed handleOnly>
+      <div className="pointer-events-none fixed inset-x-0 bottom-12 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:bottom-0">
+        <div className="pointer-events-auto mx-auto flex w-full max-w-2xl items-center gap-3 rounded-2xl border bg-background/95 p-2 shadow-[0_12px_40px_rgba(0,0,0,0.16)] backdrop-blur-xl">
+          <img
+            src={mascotImage}
+            alt=""
+            width={40}
+            height={40}
+            className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-black/10"
           />
-        ) : null}
-
-        {isLoading ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading conversation…
-          </p>
-        ) : messages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No messages yet. Start with a question or a modification request.
-          </p>
-        ) : (
-          <ol aria-label="Conversation history" className="grid gap-3">
-            {messages.map((item) => (
-              <li
-                key={item.id}
-                className={
-                  item.role === 'assistant'
-                    ? 'rounded-xl border border-primary/30 bg-primary/5 p-3'
-                    : 'rounded-xl bg-muted p-3'
-                }
-              >
-                <div className="mb-1 flex items-center gap-2 text-xs font-medium">
-                  {item.role === 'assistant' ? (
-                    <>
-                      <BotIcon className="size-4" aria-hidden />
-                      <Badge>AI response</Badge>
-                    </>
-                  ) : (
-                    <>
-                      <UserIcon className="size-4" aria-hidden /> You
-                    </>
-                  )}
-                </div>
-                <p className="whitespace-pre-wrap text-sm">{item.content}</p>
-              </li>
-            ))}
-          </ol>
-        )}
-
-        {proposal ? (
-          <ModificationReview
-            currentRecipe={currentRecipe}
-            proposal={proposal.proposal}
-            isStale={isStale}
-            pendingAction={isSending ? 'regenerate' : pendingAction}
-            onApply={() => runProposalAction('apply')}
-            onSaveAsVariant={() => runProposalAction('variant')}
-            onDiscard={() => runProposalAction('discard')}
-            onRegenerate={regenerateProposal}
-          />
-        ) : null}
-
-        {error ? (
-          <div
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
-          >
-            <p>{error}</p>
-            {shouldOfferSettings(error) ? (
-              <Button asChild variant="outline" size="sm" className="mt-2">
-                <Link to="/settings">Open Settings</Link>
-              </Button>
-            ) : null}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Ask OpenDish AI</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Chat about {recipe.title}
+            </p>
           </div>
-        ) : null}
+          {messages.length > 0 ? (
+            <Badge variant="secondary" className="hidden sm:inline-flex">
+              {messages.length} message{messages.length === 1 ? '' : 's'}
+            </Badge>
+          ) : null}
+          <DrawerTrigger asChild>
+            <Button className="h-10 rounded-xl px-4">
+              <MessageCircleIcon className="size-4" aria-hidden />
+              Open chat
+            </Button>
+          </DrawerTrigger>
+        </div>
+      </div>
+
+      <DrawerContent className="h-[min(90dvh,54rem)]">
+        <DrawerHeader className="border-b py-3">
+          <div className="mx-auto flex w-full max-w-4xl items-center gap-3">
+            <img
+              src={mascotImage}
+              alt=""
+              width={44}
+              height={44}
+              className="size-11 rounded-xl object-cover ring-1 ring-black/10"
+            />
+            <div className="min-w-0 flex-1">
+              <DrawerTitle id="recipe-assistant-title">OpenDish AI</DrawerTitle>
+              <DrawerDescription className="truncate">
+                Talking about {recipe.title}
+              </DrawerDescription>
+            </div>
+            <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+              <span className="size-1.5 animate-pulse rounded-full bg-foreground" />
+              Recipe context active
+            </div>
+            <DrawerClose asChild>
+              <Button variant="ghost" size="icon" aria-label="Close chat">
+                <XIcon className="size-4" />
+              </Button>
+            </DrawerClose>
+          </div>
+        </DrawerHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6">
+            {showAiAvailabilityBanner ? (
+              <div className="mb-5">
+                <AiAvailabilityBanner
+                  capability="recipe assistance"
+                  configuration={configuration}
+                  isLoading={isAiConfigurationLoading}
+                  error={aiConfigurationError}
+                />
+              </div>
+            ) : null}
+
+            {isLoading ? (
+              <div
+                className="m-auto flex items-center gap-2 text-sm text-muted-foreground"
+                role="status"
+              >
+                <span className="size-2 animate-pulse rounded-full bg-foreground/40" />
+                Loading conversation…
+              </div>
+            ) : messages.length === 0 && !proposal ? (
+              <div className="m-auto flex max-w-md flex-col items-center px-3 py-10 text-center">
+                <img
+                  src={mascotImage}
+                  alt=""
+                  width={72}
+                  height={72}
+                  className="size-18 rounded-2xl object-cover shadow-sm ring-1 ring-black/10"
+                />
+                <h3 className="mt-5 text-lg font-semibold">
+                  Ask me about this recipe
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  I can explain a step, suggest substitutions, or prepare a
+                  change for you to review before anything is saved.
+                </p>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  {STARTER_PROMPTS.map((prompt) => (
+                    <Button
+                      key={prompt.label}
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-full bg-background px-3 text-xs"
+                      onClick={() => {
+                        setIntent(prompt.intent);
+                        setMessage(prompt.label);
+                      }}
+                    >
+                      {prompt.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <ol aria-label="Conversation history" className="grid gap-6">
+                {messages.map((item) => (
+                  <li
+                    key={item.id}
+                    className={
+                      item.role === 'assistant'
+                        ? 'flex max-w-[92%] items-start gap-3 sm:max-w-[82%]'
+                        : 'ml-auto flex max-w-[88%] flex-row-reverse items-start gap-3 sm:max-w-[76%]'
+                    }
+                  >
+                    {item.role === 'assistant' ? (
+                      <img
+                        src={mascotImage}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="size-8 shrink-0 rounded-lg object-cover ring-1 ring-black/10"
+                      />
+                    ) : (
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <UserIcon className="size-4" aria-hidden />
+                      </span>
+                    )}
+                    <div>
+                      <p
+                        className={
+                          item.role === 'assistant'
+                            ? 'mb-1.5 text-xs font-medium text-muted-foreground'
+                            : 'mb-1.5 text-right text-xs font-medium text-muted-foreground'
+                        }
+                      >
+                        {item.role === 'assistant' ? 'OpenDish AI' : 'You'}
+                      </p>
+                      <p
+                        className={
+                          item.role === 'assistant'
+                            ? 'whitespace-pre-wrap rounded-2xl rounded-tl-md border bg-background px-4 py-3 text-sm leading-6 shadow-sm'
+                            : 'whitespace-pre-wrap rounded-2xl rounded-tr-md bg-foreground px-4 py-3 text-sm leading-6 text-background'
+                        }
+                      >
+                        {item.content}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+
+                {proposal ? (
+                  <li
+                    aria-label="AI suggestion"
+                    className="flex items-start gap-3"
+                  >
+                    <img
+                      src={mascotImage}
+                      alt=""
+                      width={32}
+                      height={32}
+                      className="size-8 shrink-0 rounded-lg object-cover ring-1 ring-black/10"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        <SparklesIcon className="size-3.5" /> OpenDish AI
+                      </p>
+                      <ModificationReview
+                        currentRecipe={currentRecipe}
+                        proposal={proposal.proposal}
+                        isStale={isStale}
+                        pendingAction={isSending ? 'regenerate' : pendingAction}
+                        onApply={() => runProposalAction('apply')}
+                        onSaveAsVariant={() => runProposalAction('variant')}
+                        onDiscard={() => runProposalAction('discard')}
+                        onRegenerate={regenerateProposal}
+                      />
+                    </div>
+                  </li>
+                ) : null}
+              </ol>
+            )}
+
+            {isSending ? (
+              <div className="mt-6 flex items-start gap-3" role="status">
+                <img
+                  src={mascotImage}
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="size-8 rounded-lg object-cover ring-1 ring-black/10"
+                />
+                <div className="flex h-10 items-center gap-1 rounded-2xl rounded-tl-md border bg-background px-4 shadow-sm">
+                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.2s]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.1s]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/60" />
+                  <span className="sr-only">Waiting for AI…</span>
+                </div>
+              </div>
+            ) : null}
+
+            {error ? (
+              <div
+                role="alert"
+                className="mt-5 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm"
+              >
+                <p>{error}</p>
+                {shouldOfferSettings(error) ? (
+                  <Button asChild variant="outline" size="sm" className="mt-2">
+                    <Link to="/settings">Open Settings</Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            <div ref={conversationEndRef} />
+          </div>
+        </div>
 
         <form
-          className="grid gap-3 border-t pt-4"
+          className="shrink-0 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6"
           onSubmit={(event) => {
             event.preventDefault();
             void invokeConversation();
           }}
         >
-          <fieldset
-            className="flex flex-wrap gap-4"
-            disabled={
-              interactionPending || !canUseAi || isAiConfigurationLoading
-            }
-          >
-            <legend className="mb-2 text-sm font-medium">
-              What should AI do?
-            </legend>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="conversation-intent"
-                value="answer"
-                checked={intent === 'answer'}
-                onChange={() => setIntent('answer')}
-              />
-              Answer a question
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="conversation-intent"
-                value="modification"
-                checked={intent === 'modification'}
-                onChange={() => setIntent('modification')}
-              />
-              Suggest a modification
-            </label>
-          </fieldset>
-          <label
-            htmlFor="recipe-assistant-message"
-            className="text-sm font-medium"
-          >
-            Message
-          </label>
-          <Textarea
-            id="recipe-assistant-message"
-            value={message}
-            maxLength={4000}
-            disabled={
-              interactionPending || !canUseAi || isAiConfigurationLoading
-            }
-            placeholder={
-              intent === 'answer'
-                ? 'What can I substitute for the tomatoes?'
-                : 'Make this vegetarian and update the steps.'
-            }
-            onChange={(event) => setMessage(event.target.value)}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="submit"
+          <div className="mx-auto w-full max-w-3xl">
+            <fieldset
+              className="mb-2 flex gap-1"
               disabled={
-                interactionPending ||
-                !canUseAi ||
-                isAiConfigurationLoading ||
-                message.trim().length === 0
+                interactionPending || !canUseAi || isAiConfigurationLoading
               }
             >
-              {isSending
-                ? 'Waiting for AI…'
-                : intent === 'answer'
-                  ? 'Ask AI'
-                  : 'Request suggestion'}
-            </Button>
-            {isSending ? (
-              <Button type="button" variant="outline" onClick={cancelRequest}>
-                <XIcon className="size-4" aria-hidden /> Cancel request
+              <legend className="sr-only">What should AI do?</legend>
+              <label className="cursor-pointer">
+                <input
+                  className="peer sr-only"
+                  type="radio"
+                  name="conversation-intent"
+                  value="answer"
+                  checked={intent === 'answer'}
+                  onChange={() => setIntent('answer')}
+                />
+                <span className="inline-flex h-7 items-center rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors peer-checked:bg-foreground peer-checked:text-background">
+                  Answer a question
+                </span>
+              </label>
+              <label className="cursor-pointer">
+                <input
+                  className="peer sr-only"
+                  type="radio"
+                  name="conversation-intent"
+                  value="modification"
+                  checked={intent === 'modification'}
+                  onChange={() => setIntent('modification')}
+                />
+                <span className="inline-flex h-7 items-center rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors peer-checked:bg-foreground peer-checked:text-background">
+                  Suggest a modification
+                </span>
+              </label>
+            </fieldset>
+
+            <div className="relative rounded-2xl border bg-muted/35 p-2 pr-12 shadow-sm focus-within:border-foreground/35 focus-within:ring-2 focus-within:ring-foreground/5">
+              <label htmlFor="recipe-assistant-message" className="sr-only">
+                Message
+              </label>
+              <Textarea
+                id="recipe-assistant-message"
+                value={message}
+                rows={2}
+                maxLength={4000}
+                disabled={
+                  interactionPending || !canUseAi || isAiConfigurationLoading
+                }
+                placeholder={
+                  intent === 'answer'
+                    ? 'Ask anything about this recipe…'
+                    : 'Describe the change you want to review…'
+                }
+                className="max-h-32 min-h-12 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+                onChange={(event) => setMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    void invokeConversation();
+                  }
+                }}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                aria-label={
+                  intent === 'answer' ? 'Ask AI' : 'Request suggestion'
+                }
+                className="absolute right-2 bottom-2 size-9 rounded-full"
+                disabled={
+                  interactionPending ||
+                  !canUseAi ||
+                  isAiConfigurationLoading ||
+                  message.trim().length === 0
+                }
+              >
+                <ArrowUpIcon className="size-4" />
               </Button>
-            ) : null}
+            </div>
+
+            <div className="mt-2 flex min-h-6 items-center justify-between gap-3 text-[0.68rem] text-muted-foreground">
+              <p>OpenDish AI uses this recipe as context.</p>
+              {isSending ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={cancelRequest}
+                >
+                  <XIcon className="size-3" aria-hidden /> Cancel request
+                </Button>
+              ) : (
+                <p className="hidden sm:block">
+                  Enter to send · Shift+Enter for a new line
+                </p>
+              )}
+            </div>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { makeQuantity, type Quantity } from '@opendish/contracts';
 
 import { createSupabaseRecipeStore } from '@/domain/recipe-save.ts';
@@ -142,6 +142,10 @@ export function useRecipes(filters: RecipeFilters) {
         tags: tagsByRecipeId.get(recipe.id) ?? [],
       }));
     },
+    // T106: keep the previously rendered recipes on screen (instead of an
+    // "isLoading" refetch that unmounts the list) while a new search/filter
+    // query key is in flight, so the search input never loses focus.
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
 }

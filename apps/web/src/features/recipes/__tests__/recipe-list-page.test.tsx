@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -185,5 +185,48 @@ describe('RecipeListPage (T032)', () => {
     expect(
       screen.getByRole('link', { name: /Create recipe/i }),
     ).toBeInTheDocument();
+  });
+
+  it('keeps input focus and value while typing a multi-character search, then debounces the filter (T106)', async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    const searchBox = screen.getByRole('textbox', { name: /search recipes/i });
+    await user.click(searchBox);
+    await user.type(searchBox, 'Choc');
+
+    // Every keystroke must preserve focus and the typed value — this is
+    // exactly the regression T106 guards against (the list used to remount
+    // on each keystroke and drop focus).
+    expect(searchBox).toHaveFocus();
+    expect(searchBox).toHaveValue('Choc');
+    expect(screen.getByText('Tomato Pasta')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Tomato Pasta')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Chocolate Cake')).toBeInTheDocument();
+    expect(searchBox).toHaveFocus();
+    expect(searchBox).toHaveValue('Choc');
+  });
+
+  it('restores the unfiltered collection when the search is cleared (T106)', async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    const searchBox = screen.getByRole('textbox', { name: /search recipes/i });
+    await user.type(searchBox, 'Choc');
+    await waitFor(() => {
+      expect(screen.queryByText('Tomato Pasta')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(searchBox).toHaveValue('');
+    await waitFor(() => {
+      expect(screen.getByText('Tomato Pasta')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Chocolate Cake')).toBeInTheDocument();
+    expect(screen.getByText('Quick Salad')).toBeInTheDocument();
   });
 });

@@ -130,3 +130,81 @@
     @apply font-sans;
   }
 }
+
+@keyframes od-prompt-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
+.od-hero-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 72% 62%, rgb(255 255 255 / 8%), transparent 28%),
+    radial-gradient(circle at 14% 22%, rgb(255 255 255 / 5%), transparent 24%),
+    linear-gradient(
+      132deg,
+      transparent 58%,
+      rgb(255 255 255 / 3%) 58.2%,
+      transparent 58.5%
+    );
+}
+
+.od-hero-prompts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.od-prompt {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 7.25rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid rgb(229 229 229 / 95%);
+  border-radius: 1.125rem;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 24px 55px rgb(0 0 0 / 24%);
+}
+
+.od-prompt-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-inline-start: 2px;
+  vertical-align: -2px;
+  border-radius: 999px;
+  background: #000;
+  animation: od-prompt-cursor 0.9s step-end infinite;
+}
+
+.od-float-card {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid rgb(255 255 255 / 38%);
+  border-radius: 1.125rem;
+  background: rgb(250 250 250 / 94%);
+  box-shadow: 0 20px 45px rgb(0 0 0 / 25%);
+  backdrop-filter: blur(12px);
+}
+
+.od-mobile-prompt .od-prompt {
+  position: relative;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  width: 100%;
+  min-height: 6.75rem;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 8%);
+  transform: none;
+  backdrop-filter: blur(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .od-prompt-cursor {
+    animation: none;
+  }
+}

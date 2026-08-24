@@ -324,3 +324,32 @@ describe('RecipeDetailPage servings scaler (T045)', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('RecipeDetailPage drawer assistant (T108)', () => {
+  beforeEach(() => {
+    saveServingAdjustment.mockReset();
+    saveServingAdjustment.mockResolvedValue(undefined);
+    addRecipeToList.mockReset();
+    addRecipeToList.mockResolvedValue(undefined);
+    historyPanelProps.mockReset();
+  });
+
+  it('keeps the assistant mounted as a persistent drawer entry point', () => {
+    renderPage();
+
+    expect(screen.getByLabelText('recipe conversation')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('tablist', { name: /recipe view/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the recipe visible at full width instead of creating split panes', () => {
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: 'Ingredients' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Steps' })).toBeVisible();
+    expect(screen.getByLabelText('recipe conversation')).toBeInTheDocument();
+    expect(document.getElementById('recipe-pane')).toBeNull();
+    expect(document.getElementById('assistant-pane')).toBeNull();
+  });
+});

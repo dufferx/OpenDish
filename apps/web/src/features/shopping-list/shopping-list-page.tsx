@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
+  CheckIcon,
+  Loader2Icon,
   PencilIcon,
   PlusIcon,
   ShoppingCartIcon,
@@ -180,8 +182,10 @@ function ShoppingListItemRow({
   item: ShoppingListItem;
   onDelete: () => void;
 }) {
-  const { togglePurchased, updateItem, isUpdating } = useShoppingListActions();
+  const { togglePurchased, updateItem, isUpdating, togglingItemId } =
+    useShoppingListActions();
   const [isEditing, setIsEditing] = useState(false);
+  const isTogglingThis = togglingItemId === item.id;
 
   if (isEditing) {
     return (
@@ -204,7 +208,7 @@ function ShoppingListItemRow({
   return (
     <li
       className={cn(
-        'flex items-start gap-3 rounded-xl border bg-card p-4',
+        'flex items-start gap-3 rounded-xl border bg-card p-4 transition-colors duration-300 motion-reduce:transition-none',
         item.isPurchased && 'bg-muted/50',
       )}
     >
@@ -212,33 +216,53 @@ function ShoppingListItemRow({
         htmlFor={`purchased-${item.id}`}
         className="flex min-h-11 items-center gap-3 py-1"
       >
-        <Checkbox
-          id={`purchased-${item.id}`}
-          checked={item.isPurchased}
-          onCheckedChange={async (checked) => {
-            await togglePurchased({
-              id: item.id,
-              isPurchased: checked === true,
-            });
-          }}
-          className="size-6"
-          aria-label={`Mark ${item.name} as ${item.isPurchased ? 'not purchased' : 'purchased'}`}
-        />
+        <span className="relative inline-flex">
+          <Checkbox
+            id={`purchased-${item.id}`}
+            checked={item.isPurchased}
+            disabled={isTogglingThis}
+            onCheckedChange={async (checked) => {
+              await togglePurchased({
+                id: item.id,
+                isPurchased: checked === true,
+              });
+            }}
+            className="size-6 transition-transform motion-safe:duration-150 motion-safe:data-checked:scale-110"
+            aria-label={`Mark ${item.name} as ${item.isPurchased ? 'not purchased' : 'purchased'}`}
+          />
+          {isTogglingThis ? (
+            <Loader2Icon
+              className="absolute -top-1 -right-1 size-3 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : null}
+        </span>
       </label>
 
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            'text-base font-medium',
+            'flex flex-wrap items-center gap-2 text-base font-medium transition-colors duration-300 motion-reduce:transition-none',
             item.isPurchased && 'text-muted-foreground line-through',
           )}
         >
           {item.name}
+          {item.isPurchased ? (
+            <CheckIcon
+              className="size-3.5 shrink-0 text-emerald-600 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in"
+              aria-hidden="true"
+            />
+          ) : null}
+          {isTogglingThis ? (
+            <span role="status" className="text-xs font-normal text-muted-foreground">
+              Saving…
+            </span>
+          ) : null}
         </p>
         {line ? (
           <p
             className={cn(
-              'text-sm',
+              'text-sm transition-colors duration-300 motion-reduce:transition-none',
               item.isPurchased
                 ? 'text-muted-foreground line-through'
                 : 'text-muted-foreground',

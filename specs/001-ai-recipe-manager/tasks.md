@@ -299,6 +299,178 @@ description: "Task list for 001-ai-recipe-manager"
 
 ---
 
+## Phase 11.5: Iterative UI/UX Review in Codex
+
+**Purpose**: Evolve the product experience through focused review iterations in the Codex app. Each iteration starts with user feedback observed against the running local application, turns that feedback into explicit UI/UX requirements and scoped tasks in this documentation, and is approved before any implementation work begins.
+
+**Scope**: Interface clarity, navigation, visual hierarchy, layout, responsive behavior, interaction feedback, accessibility, empty/loading/error states, and consistency across existing flows. This phase does not add new product capabilities, change the data model or API contracts, or implement changes merely by recording feedback.
+
+### Iteration workflow
+
+1. Run the local application in Codex and collect the user's concrete observations, including the affected screen, flow, viewport when relevant, intended outcome, and priority.
+2. Add a numbered iteration entry to this phase before changing product code. Each entry MUST state the problem, affected paths/components, acceptance criteria, relevant responsive and accessibility expectations, and the validation method.
+3. Identify whether the feedback is a UI/UX adjustment or instead requires a new product requirement, data-model change, API-contract change, or security decision. Escalate the latter to the appropriate design document before it becomes an implementation task.
+4. Keep documentation-only iterations separate from approved implementation tasks. No feedback item is implemented until the user explicitly asks to proceed with that item.
+5. After implementation is authorized in a later iteration, update the item status and record the verification evidence (manual Codex review, component/integration test, and/or responsive/accessibility check as appropriate).
+
+### UI/UX iteration backlog
+
+#### Iteration UX-001 — Initial settings, authentication, recipe, shopping, and branding review
+
+- [x] T100 [UX-001] **Suppress the redundant AI-configuration banner on Settings**
+  - **Feedback / problem**: The AI-unavailable banner on `/settings` instructs the user to open Settings even though they are already there.
+  - **Affected experience**: `/settings`; `apps/web/src/features/ai-config/ai-availability-banner.tsx` and settings composition.
+  - **Desired outcome**: Settings presents its configuration form/status directly, without a self-referential navigation prompt.
+  - **Acceptance criteria**: The banner remains available on AI-dependent screens outside Settings; it is not rendered on `/settings`; no unavailable-AI state becomes hidden or inaccessible on the settings page.
+  - **Accessibility and responsive considerations**: Removing the banner must not remove an announced status or guidance needed by assistive technology.
+  - **Validation**: Component test for route-aware banner visibility and manual mobile/desktop Codex review.
+  - **Status**: verified — `AiAvailabilityBanner` now self-hides on `/settings` (route-aware via `useLocation`), and the settings page no longer renders it explicitly. `AiAvailabilityBanner`/`AiSettingsPage` tests updated + added (route-aware visibility, no-banner-on-settings), all passing. NOT independently confirmed via a live Codex browser session in this environment (no browser tool available here) — recommend a quick manual look at `/settings` vs. `/recipes/:id` before shipping.
+
+- [x] T101 [UX-001] **Use a controlled model selector in AI settings**
+  - **Feedback / problem**: The provider model is currently a free-text field; it should always be a dropdown.
+  - **Affected experience**: `/settings`; `apps/web/src/features/ai-config/ai-settings-page.tsx`.
+  - **Desired outcome**: Users choose the model from an accessible list of supported models rather than entering an arbitrary value.
+  - **Acceptance criteria**: The current saved model appears selected; the control exposes a visible label and keyboard-operable options; submissions use only an available option; loading, validation, and unavailable-model states are clear.
+  - **Accessibility and responsive considerations**: Use a native or fully accessible select pattern and preserve usable touch targets on mobile.
+  - **Validation**: Component tests for selection, saved-value hydration, and submission; manual Codex review.
+  - **Status**: verified — replaced the free-text model `Input` with a Radix `Select` (`SUPPORTED_AI_MODELS` in `ai-config-api.ts`); a saved model that has fallen off the supported list is surfaced as its own extra, clearly-labeled option instead of disappearing (tracked as separate state so Radix's Select correctly shows it as selected on first paint). Component tests cover: default selection, keyboard-operable option choice, submission using the selected value, and the unsupported-saved-model case. Added `hasPointerCapture`/`scrollIntoView` jsdom polyfills in `src/test/setup.ts` required for Radix Select under jsdom. Manual Codex browser review not performed (no browser tool in this environment).
+
+- [x] T102 [UX-001] **Replace header sign-out with a settings avatar entry point**
+  - **Feedback / problem**: Sign out occupies the global header; the user wants an avatar/profile affordance that opens Settings for now, while sign-out moves into Settings.
+  - **Affected experience**: Global layout; `apps/web/src/app/app-layout.tsx`, `apps/web/src/features/auth/sign-out-button.tsx`, and `/settings`.
+  - **Desired outcome**: A recognizable user avatar opens Settings; sign-out is available in the settings account area.
+  - **Acceptance criteria**: The header contains an accessible avatar button/link labeled for Settings; activating it navigates to `/settings`; the header no longer exposes sign-out; Settings exposes a clearly labeled sign-out action with its existing pending/error behavior.
+  - **Accessibility and responsive considerations**: The avatar must not rely on a photo alone—provide an accessible name and a resilient initials/fallback visual until profile settings exist.
+  - **Validation**: Navigation and sign-out component tests; keyboard and mobile-header review.
+  - **Status**: verified — header now shows a `UserAvatarLink` (initials from the account email, falling back to a generic user icon, `aria-label="Open Settings"`) linking to `/settings`; sign-out moved into a new "Account" card on the Settings page next to the account email, reusing the existing `SignOutButton` with its pending/error behavior unchanged. New tests: header no longer exposes sign-out and exposes the avatar link (`app-layout.test.tsx`), Settings renders the account email and a working sign-out action (`ai-settings-page.test.tsx`). Manual mobile-header visual review not performed live.
+
+- [x] T103 [UX-001] **Add Google brand icon to the OAuth action**
+  - **Feedback / problem**: “Continue with Google” lacks the Google logo.
+  - **Affected experience**: `/login`; `apps/web/src/features/auth/login-page.tsx`.
+  - **Desired outcome**: The optional Google OAuth action includes the recognizable Google mark.
+  - **Acceptance criteria**: The icon appears only when Google sign-in is enabled; it is decorative or has correct accessible labeling without duplicating the button name; loading and disabled states retain a stable layout.
+  - **Accessibility and responsive considerations**: Keep text as the accessible action name and maintain contrast at all supported sizes.
+  - **Validation**: Existing OAuth visibility/loading tests updated; visual review.
+  - **Status**: verified — added a decorative (`aria-hidden`) inline multi-color Google "G" `GoogleIcon` inside the existing "Continue with Google" button, rendered only inside the already `googleEnabled`-gated block; button text remains the accessible name and layout stays stable across loading/disabled states (icon is fixed, only trailing text changes). New test asserts the icon renders when Google is enabled; visual/contrast review not performed live.
+
+- [x] T104 [UX-001] **Make the active authentication mode unmistakable**
+  - **Feedback / problem**: The Sign in / Create account switch does not visibly communicate which mode is selected.
+  - **Affected experience**: `/login`; `apps/web/src/features/auth/login-page.tsx`.
+  - **Desired outcome**: Selected and unselected modes are visually distinct and programmatically exposed.
+  - **Acceptance criteria**: The selected mode has a persistent high-contrast active treatment; the inactive mode remains clearly actionable; the state is exposed through the appropriate semantic selected/pressed state; switching modes updates title, form, and submit copy coherently.
+  - **Accessibility and responsive considerations**: Meet contrast requirements and preserve visible focus independent of selected styling.
+  - **Validation**: Component tests for selected semantics and mode changes; keyboard review.
+  - **Status**: verified — the mode switch already exposed `aria-pressed`, but both variants (`secondary`/`ghost`) read too similarly; the active button now uses the high-contrast `default` (primary) variant against `ghost` for the inactive one, so selection is unmistakable at a glance while `aria-pressed` continues to expose it programmatically. New test asserts `aria-pressed` and the underlying `data-variant` swap correctly on click. Keyboard/contrast review not performed live.
+
+- [x] T105 [UX-001] **Provide password visibility control**
+  - **Feedback / problem**: Password fields cannot be temporarily revealed.
+  - **Affected experience**: `/login`; `apps/web/src/features/auth/login-page.tsx`.
+  - **Desired outcome**: A user can toggle password masking with an icon control.
+  - **Acceptance criteria**: The control changes only the field’s presentation between masked and visible; it has an accessible “Show password” / “Hide password” name; it does not clear the value or submit the form; both authentication modes support it.
+  - **Accessibility and responsive considerations**: The icon has a touch-friendly target, visible focus, and does not depend on color alone.
+  - **Validation**: Component tests for field type and accessible name transitions; mobile review.
+  - **Status**: verified — added an Eye/EyeOff icon toggle button (touch target `size-9`) inside both the password and confirm-password fields, independently toggleable, `aria-label` switching between "Show password"/"Hide password" (and the confirm-password equivalents), never clearing the value or submitting the form (`type="button"`). Tests cover reveal/hide without side effects and independent toggles in create-account mode. Mobile/touch review not performed live.
+
+- [x] T106 [UX-001] **Stabilize recipe search while typing**
+  - **Feedback / problem**: Entering search text reloads or remounts the recipe UI, making search unusable.
+  - **Affected experience**: `/`; `apps/web/src/features/recipes/recipe-list-page.tsx` and its query/state wiring.
+  - **Desired outcome**: Search filters results smoothly without losing focus, text, or the surrounding page state.
+  - **Acceptance criteria**: Each keystroke preserves input focus and its current value; the page does not navigate or visually reset; result updates are debounced and show an intentional loading state only when needed; clearing search restores the unfiltered collection.
+  - **Accessibility and responsive considerations**: Do not announce every keystroke; announce meaningful result/loading changes through an appropriate live region if one is added.
+  - **Validation**: Regression test that types a multi-character query and asserts focus/value persist; manual performance review in Codex.
+  - **Status**: verified — root cause was `useRecipes`' `isLoading` flipping true (and replacing the whole page with the full-page `<Loading/>`) on every new search `queryKey`, unmounting the search input on each keystroke. Fixed by: separating the always-mounted `searchInput` (immediate) from a 300ms-debounced `filters.search` used for the query; `placeholderData: keepPreviousData` on `useRecipes` so a filter change no longer flips `isLoading`; a visually-hidden `aria-live="polite"` status region that announces result-count/updating changes once per settled search instead of per keystroke; a small inline spinner during background refetches. New regression test types a multi-character query and asserts input focus/value persist and results update after debounce; a second test confirms Clear restores the unfiltered list. Manual perf review in Codex not performed live.
+
+- [x] T107 [UX-001] **Add clear purchased-state feedback to shopping-list items**
+  - **Feedback / problem**: Toggling a shopping-list checkbox gives insufficient feedback.
+  - **Affected experience**: `/shopping-list`; `apps/web/src/features/shopping-list/shopping-list-page.tsx`.
+  - **Desired outcome**: A purchased toggle responds immediately with a clear, pleasant state transition.
+  - **Acceptance criteria**: The checkbox state updates immediately; the item receives a visible purchased treatment (for example, check animation plus text treatment); pending/saved/error states are distinguishable; the item remains undoable.
+  - **Accessibility and responsive considerations**: Respect reduced-motion preferences, keep the control’s checked state programmatically correct, and never use animation as the sole confirmation.
+  - **Validation**: Component test for state transitions and mutation states; manual reduced-motion and touch review.
+  - **Status**: verified — `togglePurchased` now applies an optimistic cache update (`onMutate`/`onError` rollback/`onSettled` reconcile) so the checkbox and row flip immediately instead of waiting on the round trip; the mutation's pending item id is exposed so only the row being saved shows a small spinner + "Saving…" status text (others are unaffected); a purchased item gets an additional small checkmark icon (motion-safe pop-in) alongside the existing line-through/muted text treatment, so confirmation never depends on animation alone; row/text color transitions are gated with `motion-reduce:transition-none` and the checkmark entrance with `motion-safe:`; toggling again remains the undo path (rollback on failure restores the previous state and surfaces a toast). New tests cover the per-row pending indicator, the checkmark treatment, and re-toggling to undo. Manual reduced-motion/touch review not performed live.
+
+- [x] T108 [UX-001] **Redesign recipe assistance as a persistent split-view conversation**
+  - **Feedback / problem**: The current assistant is an isolated card. The desired experience is an active, chat-first conversation paired with the relevant recipe, with suggestions appearing as chat messages.
+  - **Affected experience**: Recipe detail and assistant flow; `apps/web/src/features/recipes/recipe-detail-page.tsx`, `apps/web/src/features/recipe-conversation/recipe-conversation.tsx`, and `apps/web/src/features/modification-review/`.
+  - **Desired outcome**: When a recipe conversation is active, desktop/tablet layouts show recipe and conversation in a balanced split view; the conversation supports normal chat chronology and presents modification suggestions in-message while preserving explicit review/apply control.
+  - **Acceptance criteria**: Starting/opening a recipe conversation switches to the conversation-focused layout; wide viewports render recipe and chat side by side with neither pane obscured; narrow viewports provide an intentional stacked or switchable equivalent; messages retain their order and loading/error states; AI suggestions remain unapplied until the existing explicit review action; returning to the recipe preserves the active conversation context.
+  - **Accessibility and responsive considerations**: Define keyboard focus order across panes, readable chat announcements, scroll behavior, and a mobile layout that does not create competing nested scroll regions.
+  - **Validation**: New component/integration coverage for layout state and proposal actions; responsive Codex review at mobile and desktop widths; accessibility pass.
+  - **Status**: implemented (not independently verified — see caveat). `RecipeDetailPage` now opens an "Ask AI" entry point that switches to a two-pane layout: `lg:grid-cols-2` renders the recipe pane and a `lg:sticky`, independently `lg:overflow-y-auto` assistant pane side by side; below `lg` only one pane is visible at a time via an accessible `role="tablist"`/`role="tab"`/`role="tabpanel"` switcher (`aria-selected`, `aria-controls`), with both panes kept mounted (`hidden` class only) so switching tabs never drops conversation state and mobile never has two competing scroll regions. Opening the assistant moves keyboard focus into the pane (`tabIndex={-1}` + `.focus()`). Inside `RecipeConversation`, the pending `ModificationReview` now renders as the last `<li>` of the conversation `<ol>` (an in-message suggestion) instead of a detached card below it — the apply/save-as-variant/discard/regenerate logic in `ModificationReview`/`proposal-actions.ts` was not touched, so suggestions remain unapplied until that same explicit action. New tests (`recipe-detail-page.test.tsx`): assistant stays closed by default, opening it switches layout and moves focus, the mobile tab switcher toggles pane visibility without unmounting either pane (conversation stays in the DOM). Existing `recipe-conversation`/`modification-review` tests continue to pass unchanged, confirming message order/loading/error/proposal-action behavior wasn't altered. **Caveat — not done**: no live browser/Playwright tool was available in this environment, so the explicitly-requested "responsive Codex review at mobile and desktop widths" and a manual accessibility pass (contrast, real screen-reader chat announcements, actual scroll behavior) were **not performed**; only automated component tests and code-level review back this item. Recommend a manual pass in Codex at both viewport sizes before treating this as fully verified.
+
+- [ ] T109 [UX-001] **Define nutrition-macros requirement before designing macro displays**
+  - **Feedback / problem**: Macros should be calculated by AI and shown consistently in recipe cards and recipe details.
+  - **Affected experience**: Recipe generation/import/edit/save flows, recipe list and detail, AI provider output, shared contracts, data model, and potentially shopping/history presentation.
+  - **Desired outcome**: Establish a product-approved, trustworthy nutrition-macros model before creating UI tasks that expose it everywhere.
+  - **Acceptance criteria**: Update `spec.md`, `data-model.md`, `contracts/api-contracts.md`, and `research.md` with the approved macro fields, source/provenance, calculation trigger, refresh/edit behavior, failure/degradation behavior, persistence/history rules, and estimate disclaimer; resolve the conflict between “AI should always calculate macros” and the current requirement that core recipe management works without configured AI; then create a separate implementation task sequence and display specifications.
+  - **Accessibility and responsive considerations**: Macro summaries must use readable labels and units rather than color-only visuals, and remain understandable when estimates are unavailable.
+  - **Validation**: Design-review approval of the updated specification before any data-model, API, or UI implementation begins.
+  - **Status**: documented — requires product decision and specification update
+
+- [x] T110 [UX-001] **Adopt the supplied mascot as the application brand mark**
+  - **Feedback / problem**: The text-only OpenDish header brand should be replaced throughout the app by the supplied mascot asset.
+  - **Affected experience**: Global shell and authentication branding; `apps/web/src/app/app-layout.tsx`, `apps/web/src/features/auth/login-page.tsx`, and `/Users/dufferx/Desktop/opendish/plate_chef_a2_1787334522690.jpg`.
+  - **Desired outcome**: A consistent, recognizable mascot-led brand entry point across application screens.
+  - **Acceptance criteria**: The supplied mascot is used as the header brand mark on authenticated screens and consistently reflected on the login screen; activating the header mark retains its existing home navigation behavior; image sizing, cropping, loading, and fallback behavior are intentional; the brand remains legible in compact headers.
+  - **Accessibility and responsive considerations**: Provide appropriate alternative text or a decorative treatment paired with an accessible OpenDish link name; do not make the logo the only indicator of the destination.
+  - **Validation**: Visual review across all primary routes and mobile/desktop header tests.
+  - **Status**: verified — the mascot is used on login and in the global authenticated header. Its circular crop was replaced with a rounded-square treatment (`rounded-xl` on login and `rounded-md` in the compact header), preserving explicit sizing, fallback background, and `object-cover`; focused tests and a live Codex review of `/login` passed.
+
+**Entry template**:
+
+- [ ] T### [UX-###] **Title**
+  - **Feedback / problem**:
+  - **Affected experience**: route(s), component(s), and viewport(s)
+  - **Desired outcome**:
+  - **Acceptance criteria**:
+  - **Accessibility and responsive considerations**:
+  - **Validation**:
+  - **Status**: documented | approved for implementation | implemented | verified
+
+**Checkpoint**: Each accepted UI/UX iteration is documented with testable acceptance criteria before implementation and verified against those criteria after implementation. The phase may continue alongside release preparation; it does not block managed or self-hosted distribution unless an iteration identifies a release-critical defect.
+
+---
+
+## Phase 11.75: Social Media Video Recipe Import (`yt-dlp`) — Planning Complete, Implementation Gated
+
+**Purpose**: Let users import recipes from Instagram Reels, TikTok videos, and YouTube Shorts whose recipe lives in the caption or spoken narration, by fetching content the way real open-source recipe managers do (`yt-dlp`) instead of the plain HTTP fetch `import-recipe` uses today — which Instagram in particular defeats with a login wall. Full investigation: research.md R14. User story: spec.md User Story 9.
+
+**⚠️ APPROVAL GATE — DO NOT START THE IMPLEMENTATION TASKS BELOW WITHOUT EXPLICIT USER SIGN-OFF ON THE SCOPE DECISION.** Unlike every other phase in this document, this phase requires a product decision, not just an engineering estimate: it is the first feature needing infrastructure outside Supabase + static frontend, and (if Instagram is included) custody of the user's own platform session cookies. research.md R14 lists four open questions that MUST be answered and recorded below before any `[ ]` implementation task in this phase is started. Until then, the interim behavior is the Phase 11.5 hotfix already shipped: `import-recipe` recognizes Instagram/TikTok/Facebook/YouTube Shorts URLs and returns a clear "not supported, paste the caption instead" message instead of attempting extraction (`isUnsupportedSocialUrl` in `supabase/functions/import-recipe/handler.ts`).
+
+### Scope decision (record answers here before implementation begins)
+
+- [ ] D1 Approved platform scope: TikTok + YouTube Shorts only, or also Instagram (cookie-based)?
+- [ ] D2 Approved hosting target and budget for the new external microservice (Fly.io / Render / Cloud Run / other)?
+- [ ] D3 Approved Whisper-transcript-fallback policy: always attempt / opt-in only / not included in this phase's v1?
+- [ ] D4 If Instagram is in scope: approved cookie custody model (where stored, expiry/rotation UX, explicit user consent copy)?
+
+### Tests for this phase
+
+- [ ] T111 [P] Contract test: video-import microservice HTTP contract (metadata-only success, transcript-fallback success, unsupported-platform error, upstream-blocked error) against a fixture/mock server — no live network calls
+- [ ] T112 [P] Contract test: `import-recipe` extends the existing `isUnsupportedSocialUrl` routing to call the new service for approved platforms while still returning the clear message for any platform not in scope per D1
+- [ ] T113 [P] Security test: any cookie credentials (if D1 includes Instagram) are never logged, never returned by any API, and stored only via the same Vault pattern as `ai-configure` (T028)
+
+### Implementation — Track A: metadata-only import (TikTok, YouTube Shorts)
+
+- [ ] T114 Stand up the version-pinned `yt-dlp` + `ffmpeg` microservice (per D2) exposing one authenticated HTTP endpoint that accepts a URL and returns `{ title, description }` via `--dump-json --skip-download`, with request timeouts and response size limits mirroring `safe-fetch.ts`'s existing discipline
+- [ ] T115 Extend `supabase/functions/import-recipe/handler.ts` so recognized video-platform URLs call the new service (shared secret) instead of the "unsupported" short-circuit, feeding the returned description into the existing, unmodified `extractRecipe` AI pipeline
+- [ ] T116 Add an `extractionMethod: 'video_transcript'` (or `'video_metadata'` when no transcript was used) value to the import result contract in `packages/contracts` and the review screen's extraction-method indicator (T043)
+- [ ] T117 Update the import UI hint copy (`import-recipe-page.tsx`) to reflect which platforms are newly supported per D1, keeping the clear "unsupported" message for everything still out of scope
+
+### Implementation — Track B: audio-transcript fallback (only if D3 approves it)
+
+- [ ] T118 Extend the microservice to fall back to `-x --audio-format mp3` audio extraction when description-only extraction yields no usable recipe, capped to short-form video durations
+- [ ] T119 Send extracted audio to the user's configured OpenAI Whisper endpoint (reusing existing BYOK credentials from `ai-configure`); surface the estimated added latency/cost to the user before triggering this path, per FR-042
+
+### Implementation — Track C: Instagram cookie-based support (only if D1/D4 approve it)
+
+- [ ] T120 Design and implement user-supplied Instagram session cookie storage via Supabase Vault, following the exact non-exposure pattern of `ai-configure` (T028), including explicit consent copy about account risk, per FR-043
+- [ ] T121 Wire cookie-based requests through the microservice for Instagram URLs only; document the expected reliability ceiling (best-effort, not guaranteed — research.md R14 risk 4) directly in the failure message shown to users
+
+**Checkpoint**: Only the tracks actually approved in the scope decision need to be green for this phase to close; unapproved tracks stay unchecked by design and do not block Phase 12/13.
+
+---
+
 ## Phase 12: Managed Cloud Distribution and Reference Deployment
 
 **Purpose**: Make managed Supabase the simplest supported production path without coupling OpenDish to the maintainer's project or frontend host
@@ -335,6 +507,8 @@ description: "Task list for 001-ai-recipe-manager"
 - **Portable Foundation (Phase 8.5)**: depends on the implemented foundation and completed stories through Phase 8; **BLOCKS Phases 9–13**
 - **User Stories 7–8 (Phases 9–10)**: depend on Foundational plus Portable Foundation
 - **Polish (Phase 11)**: depends on all desired stories and Portable Foundation being complete
+- **Iterative UI/UX Review (Phase 11.5)**: begins after the Phase 11 baseline and is driven by documented user feedback from the running Codex app; it may proceed independently of Phases 12–13
+- **Social Media Video Import (Phase 11.75)**: fully planned (research.md R14) but explicitly gated behind an out-of-band product/scope approval; independent of Phases 12–13 and does not block managed or self-hosted distribution either way
 - **Managed Cloud Distribution (Phase 12)**: depends on Phase 11 release readiness
 - **Advanced Self-Hosted Distribution (Phase 13)**: depends on Phase 11 and the stable portable contract; it follows the managed reference path but does not depend on Supabase Cloud at runtime
 
@@ -393,12 +567,15 @@ Task: "Recipe save path in apps/web/src/domain/recipe-save.ts"     # T024
 6. Portable Foundation → prove local + managed parity and freeze the environment contract
 7. US7–US8 → validate each → v1 feature-complete
 8. Polish → full quality gates
-9. Managed Cloud distribution/reference deployment
-10. Advanced self-hosted distribution
+9. Iterative UI/UX review in Codex → document, approve, implement, and verify each accepted adjustment
+10. Social media video import (gated) → answer research.md R14's open questions, record the scope decision, then implement only the approved tracks
+11. Managed Cloud distribution/reference deployment
+12. Advanced self-hosted distribution
 
 ### Notes
 
 - No tasks exist for out-of-scope items (social features, meal planning, pantry, multi-provider, multi-list, i18n infra, RAG) — constitution YAGNI
+- Phase 11.75 (social media video import) is fully planned but explicitly gated behind product approval of research.md R14's four open questions (platform scope, hosting budget, Whisper-fallback policy, Instagram cookie custody) — it is not part of the default execution path and MUST NOT be started without that approval recorded in the phase's scope-decision checklist
 - T081/T082 were appended during `/speckit.analyze` remediation (FR-035 coverage) and live inside their story phases despite the higher IDs
 - Every recipe write goes through the single domain save path (T024) — this is how "every saved change creates history" stays structural
 - All automated tests use the fake provider (T027); live AI calls happen only in manual verification

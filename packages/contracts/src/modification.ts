@@ -62,9 +62,11 @@ export type ModificationOp = z.infer<typeof modificationOpSchema>;
 
 /**
  * AI-proposed modification: the operation list for summarizing the change
- * plus the full resulting recipe for review/diff. `resultingRecipe` must
- * equal the base recipe with `operations` applied (checked by the Edge
- * Function via deterministic re-application, not by this schema).
+ * plus a full resulting recipe for review/diff. This schema only checks
+ * shape — the Edge Function always replaces `resultingRecipe` with the
+ * deterministic re-application of `operations` before returning or
+ * persisting the proposal, so the AI's own `resultingRecipe` value is never
+ * trusted for correctness (see `_shared/recipe-modification.ts`).
  */
 export const modificationProposalSchema = z.object({
   summary: z.string().min(1),

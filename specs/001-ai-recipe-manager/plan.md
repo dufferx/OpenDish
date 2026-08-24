@@ -135,6 +135,10 @@ tests/
 | FR-031 degradation | Fake provider failure → core flows unaffected |
 | E2E (Playwright) | SC-001 primary flow, SC-002 generation flow, login gate |
 
+## Planned Architecture Extension (Pending Approval): Social Media Video Import
+
+User Story 9 / tasks.md Phase 11.75 (import from Instagram/TikTok/YouTube Shorts, research.md R14) would be the first feature requiring a component outside this plan's architecture: `yt-dlp` + `ffmpeg` need subprocess execution, which Supabase Edge Functions (Deno Deploy) cannot do. It would require a new, separately hosted HTTP microservice — the first departure from "Supabase + independently hosted static frontend, nothing else" and from the "Zero/near-zero hosting cost" constraint above. This is deliberately **not** reflected in the directory structure or Edge Function list below until research.md R14's open questions are explicitly approved; see tasks.md Phase 11.75 for the gated task breakdown.
+
 ## Remaining Open Decisions
 
 None blocking implementation. The technical direction fixed the stack and authorized provider selection; research.md selected OpenAI (R1) and rational quantities (R3). The original Google-only single-owner decision (R5) was superseded on 2026-08-21 by portable Auth: email/password baseline, optional Google OAuth, no mandatory allowlist, and per-account RLS isolation. Phase 8.5 freezes local/managed parity before later features; managed distribution and advanced self-hosting follow feature completion.

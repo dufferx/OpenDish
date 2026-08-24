@@ -502,8 +502,13 @@ describe('ai-propose-modification handler contract', () => {
     ).toHaveLength(0);
   });
 
-  it('rejects a schema-valid proposal whose resulting recipe differs from deterministic operation re-application', async () => {
-    const incoherent: ModificationProposal = {
+  it('overwrites a schema-valid resultingRecipe that diverges from deterministic operation re-application instead of rejecting it', async () => {
+    // Regression test: the AI's own `resultingRecipe` text can legitimately
+    // drift from what its `operations` actually produce (the two are
+    // independently generated). The server must derive the true result from
+    // `operations` and accept the proposal, rather than reject a perfectly
+    // valid edit just because the AI's freestanding copy disagreed.
+    const divergentResult: ModificationProposal = {
       ...validProposal,
       resultingRecipe: {
         ...validProposal.resultingRecipe,
@@ -511,7 +516,7 @@ describe('ai-propose-modification handler contract', () => {
       },
     };
     const provider = new FakeAiProvider({
-      proposeRecipeModification: ok(incoherent),
+      proposeRecipeModification: ok(divergentResult),
     });
     const store = new FakeRecipeConversationStore();
     const handler = createProposeModificationHandler(
@@ -522,6 +527,37 @@ describe('ai-propose-modification handler contract', () => {
       makeRequest('ai-propose-modification', {
         recipeId: RECIPE_A,
         request: 'Make four servings.',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.outcome.proposal.resultingRecipe.title).toBe(
+      validProposal.resultingRecipe.title,
+    );
+    expect(store.proposals).toHaveLength(1);
+    expect(store.proposals[0]?.proposal.resultingRecipe.title).toBe(
+      validProposal.resultingRecipe.title,
+    );
+  });
+
+  it('rejects operations that reference a position outside the recipe', async () => {
+    const outOfRange: ModificationProposal = {
+      ...validProposal,
+      operations: [{ kind: 'removeIngredient', position: 99 }],
+    };
+    const provider = new FakeAiProvider({
+      proposeRecipeModification: ok(outOfRange),
+    });
+    const store = new FakeRecipeConversationStore();
+    const handler = createProposeModificationHandler(
+      proposeOptions(store, provider),
+    );
+
+    const response = await handler(
+      makeRequest('ai-propose-modification', {
+        recipeId: RECIPE_A,
+        request: 'Remove an ingredient that does not exist.',
       }),
     );
 

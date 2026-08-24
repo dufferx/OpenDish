@@ -246,11 +246,29 @@ export function useShoppingListActions() {
         .eq('id', id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
+    // T107: flip the checkbox/row treatment immediately instead of waiting
+    // for the round trip, and roll back cleanly (the item stays undoable)
+    // if the save fails.
+    onMutate: async ({ id, isPurchased }) => {
+      await queryClient.cancelQueries({ queryKey: LIST_QUERY_KEY });
+      const previousItems = queryClient.getQueryData<ShoppingListItem[]>(
+        LIST_QUERY_KEY,
+      );
+      queryClient.setQueryData<ShoppingListItem[]>(LIST_QUERY_KEY, (items) =>
+        items?.map((item) =>
+          item.id === id ? { ...item, isPurchased } : item,
+        ),
+      );
+      return { previousItems };
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      if (context?.previousItems) {
+        queryClient.setQueryData(LIST_QUERY_KEY, context.previousItems);
+      }
       toast.error(error.message ?? 'Could not update the item.');
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
     },
   });
 
@@ -377,6 +395,12 @@ export function useShoppingListActions() {
     addManualItem: addManualItem.mutateAsync,
     addRecipe: addRecipe.mutateAsync,
     isToggling: togglePurchased.isPending,
+    // T107: which single row (if any) is mid-save, so the row can show its
+    // own pending treatment instead of a page-wide indicator.
+    togglingItemId: togglePurchased.isPending
+      ? (togglePurchased.variables?.id ?? null)
+      : null,
+    toggleError: togglePurchased.isError,
     isUpdating: updateItem.isPending,
     isDeleting: deleteItem.isPending,
     isAddingManual: addManualItem.isPending,

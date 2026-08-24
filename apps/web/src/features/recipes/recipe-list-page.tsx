@@ -1,8 +1,9 @@
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   HeartIcon,
   ImportIcon,
+  Loader2Icon,
   PlusIcon,
   SearchIcon,
   SparklesIcon,
@@ -24,29 +25,45 @@ import {
 import { useRecipeActions } from './use-recipe-actions.ts';
 import { RecipeCard } from './recipe-card.tsx';
 
+/** T106: keystrokes update this local input immediately; the query filter
+ * only follows after the user pauses, so PostgREST isn't hit on every
+ * keystroke and the input is never remounted mid-typing. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function RecipeListPage() {
+  const [searchInput, setSearchInput] = useState('');
   const [filters, setFilters] = useState<RecipeFilters>({
     search: '',
     tag: null,
     favoritesOnly: false,
   });
-  const deferredFilters = useDeferredValue(filters);
   const [deleteTarget, setDeleteTarget] = useState<RecipeListItem | null>(null);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setFilters((prev) =>
+        prev.search === searchInput ? prev : { ...prev, search: searchInput },
+      );
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
 
   const {
     data: recipes,
     isLoading,
+    isFetching,
     error,
     refetch,
-  } = useRecipes(deferredFilters);
+  } = useRecipes(filters);
   const { data: allTags } = useAllTags();
   const { deleteRecipe, duplicateRecipe, toggleFavorite, isDeleting } =
     useRecipeActions();
 
   const visibleRecipes = useMemo(
-    () => applyTagFilter(recipes ?? [], deferredFilters.tag),
-    [recipes, deferredFilters.tag],
+    () => applyTagFilter(recipes ?? [], filters.tag),
+    [recipes, filters.tag],
   );
+  const isRefreshingResults = isFetching && !isLoading;
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
@@ -101,13 +118,24 @@ export function RecipeListPage() {
           <Input
             placeholder="Search recipes"
             className="pl-9"
-            value={filters.search}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, search: e.target.value }))
-            }
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             aria-label="Search recipes"
           />
+          {isRefreshingResults ? (
+            <Loader2Icon
+              className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : null}
         </div>
+        {/* T106: announce meaningful result changes once search settles,
+            without narrating every keystroke. */}
+        <p role="status" aria-live="polite" className="sr-only">
+          {isRefreshingResults
+            ? 'Updating recipes…'
+            : `${visibleRecipes.length} recipe${visibleRecipes.length === 1 ? '' : 's'} found.`}
+        </p>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -148,14 +176,15 @@ export function RecipeListPage() {
               {tag}
             </Button>
           ))}
-          {filters.tag || filters.favoritesOnly || filters.search ? (
+          {filters.tag || filters.favoritesOnly || searchInput ? (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() =>
-                setFilters({ search: '', tag: null, favoritesOnly: false })
-              }
+              onClick={() => {
+                setSearchInput('');
+                setFilters({ search: '', tag: null, favoritesOnly: false });
+              }}
             >
               Clear
             </Button>

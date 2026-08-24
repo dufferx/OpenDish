@@ -175,7 +175,9 @@ export function ImportRecipePage() {
             />
             <p className="text-xs text-muted-foreground">
               Supports recipe pages with structured markup. Pages without it
-              require AI to be configured in settings.
+              require AI to be configured in settings. Instagram, TikTok,
+              Facebook, and YouTube Shorts links aren't supported — copy the
+              caption and use "Paste text" instead.
             </p>
           </div>
         ) : (

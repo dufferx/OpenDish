@@ -190,6 +190,26 @@ The user configures AI functionality with their own credentials in a settings ar
 
 ---
 
+### User Story 9 - Import a Recipe From a Social Media Video Link (Priority: P3, Planned — Not Yet Approved for Implementation)
+
+The user pastes a link to an Instagram Reel, TikTok video, or YouTube Short whose recipe lives in the caption/description or the spoken narration rather than in fetchable page markup. The application retrieves that caption/description (and, when necessary, a transcript of the narration) and runs it through the same reviewed-import pipeline as any other import (User Story 2): a structured draft is presented for mandatory review, and nothing is saved without explicit confirmation.
+
+**Why this priority**: Genuinely useful — a large share of recipe sharing happens on these platforms — but it is the first feature requiring infrastructure and a trust model beyond this project's current "Supabase + static frontend only" architecture (a new external service, and for Instagram specifically, custody of the user's own platform session cookies). It is deliberately P3 and **gated**: research.md R14 documents the full technical investigation and lists open questions that MUST be answered and approved before any implementation task begins, independent of priority ordering elsewhere in this document.
+
+**Independent Test**: Once approved and implemented — submit a public TikTok or YouTube Shorts URL whose caption contains a full recipe; receive the same editable review screen as any other import; correct one field; save; verify the saved recipe behaves identically to any other recipe (US1–US8 apply unchanged).
+
+**Acceptance Scenarios**:
+
+1. **Given** a public TikTok or YouTube Shorts URL whose caption/description contains a complete recipe, **When** the user submits it for import, **Then** a structured draft is presented in the same mandatory review screen used by User Story 2, and nothing is persisted before explicit save.
+2. **Given** a video whose caption has no usable recipe text but whose narration describes one, **When** import is attempted, **Then** the system MAY transcribe the audio and extract from the transcript, and MUST clearly indicate the source was a transcript when it succeeds.
+3. **Given** an Instagram URL and no configured Instagram session credentials, **When** the user submits it for import, **Then** the system MUST show a clear, specific message that Instagram import requires additional one-time setup (or remains unsupported, depending on the approved scope) and MUST NOT return a confusing generic AI/schema error.
+4. **Given** extraction fails for any reason (platform blocks the request, no recipe found, transcription fails), **When** import is attempted, **Then** the user sees a clear, non-technical failure message and is offered the existing "Paste text" fallback, consistent with FR-009.
+5. **Given** this story is not yet approved/enabled, **When** a user submits an Instagram/TikTok/YouTube Shorts URL, **Then** the system MUST show a clear "not supported yet, paste the caption instead" message rather than attempting extraction and failing with an opaque AI error.
+
+**Note**: Scenario 5 describes the interim behavior already shipped ahead of this story (see the Phase 11.5 hotfix in `tasks.md` and `supabase/functions/import-recipe/handler.ts`'s `isUnsupportedSocialUrl` check); scenarios 1–4 describe the target behavior once Phase 11.75 (`tasks.md`) is explicitly approved and implemented per research.md R14.
+
+---
+
 ### Edge Cases
 
 - **Scaling to zero or extreme servings**: serving adjustment rejects non-positive or absurd values with validation feedback instead of producing nonsense quantities.
@@ -276,6 +296,13 @@ The user configures AI functionality with their own credentials in a settings ar
 - **FR-034**: Primary navigation MUST provide easy access to: recipes, recipe creation/import, AI-assisted recipe creation, shopping list, and settings.
 - **FR-035**: AI-generated estimates (e.g., timing, nutrition-like values) MUST NOT be presented as guaranteed facts, and AI-generated content MUST be visually distinguishable from saved user data where both appear.
 
+**Social media video import (planned, gated — see research.md R14 and tasks.md Phase 11.75)**
+
+- **FR-040**: When implementation is explicitly approved, users MUST be able to submit a link to a supported social media video platform (initially TikTok and YouTube Shorts; Instagram only if its cookie-custody model is separately approved per research.md R14) and receive a structured recipe draft through the same mandatory review pipeline as FR-006–FR-010; the extraction source (caption vs. transcript) MUST be visible to the user.
+- **FR-041**: Until FR-040 is implemented, submitting a URL from a video platform MUST produce a clear, specific message directing the user to the existing paste-text import path, rather than a generic extraction-failure error.
+- **FR-042**: If audio transcription is used as a fallback, it MUST use the user's own configured AI provider credentials (BYOK) and MUST NOT be attempted without the user understanding it will consume additional AI provider usage.
+- **FR-043**: If Instagram-specific support requiring session cookies is approved, those cookies MUST be treated as a credential with the same handling standard as FR-030 (never logged, never exposed to unauthorized clients), and their custody/expiry model MUST be documented to the user before they opt in.
+
 **Installation and portability**
 
 - **FR-036**: The same frontend, migrations, and Edge Function sources MUST support both a Supabase CLI local stack and an installation-owned managed Supabase project; switching profiles MUST require configuration only, never application forks or hard-coded project identifiers.
@@ -318,7 +345,7 @@ The user configures AI functionality with their own credentials in a settings ar
 - Supabase Cloud is the recommended production path, not a requirement. The CLI local stack supports localhost use and development; permanent self-hosted production is an advanced distribution profile delivered after feature completion.
 - Email/password is the provider-independent Auth baseline. Google OAuth is optional and configured per installation.
 - Users bring their own AI provider credentials and accept that AI features are inert until configured; v1 ships with one functional provider.
-- Import v1 targets pasted text and web pages exposing standard recipe structure; social-media/video import is a later feature, though the import UX should not preclude adding sources later.
+- Import v1 targets pasted text and web pages exposing standard recipe structure; social-media/video import is User Story 9 — researched (research.md R14) but not yet approved for implementation (tasks.md Phase 11.75) — though the import UX should not preclude adding sources later.
 - Each recipe has exactly one persistent conversation; advanced conversation management (multiple threads, search, export, branching) is out of scope for v1.
 - The versioning/history interface can be minimal (list prior states, restore) as long as every saved change is recoverable.
 - Nutritional or similar estimates, when produced by AI, are labeled as estimates; no clinical or medical claims are made.
@@ -328,4 +355,6 @@ The user configures AI functionality with their own credentials in a settings ar
 
 ## Out of Scope (Initial Version)
 
-Social features (followers, comments, public feeds, discovery marketplace), paid subscriptions or monetization, automated grocery purchasing, native mobile apps, household integrations, autonomous AI agents, generated recipe images, medical/clinical nutrition advice or claims of exact nutrition values, pantry/inventory management, meal planning, family or collaborative accounts, complex permissions, plugin marketplaces, public API, offline-first synchronization, advanced video processing, and direct import from TikTok/Instagram/YouTube Shorts or similar video platforms (long-term vision, later feature).
+Social features (followers, comments, public feeds, discovery marketplace), paid subscriptions or monetization, automated grocery purchasing, native mobile apps, household integrations, autonomous AI agents, generated recipe images, medical/clinical nutrition advice or claims of exact nutrition values, pantry/inventory management, meal planning, family or collaborative accounts, complex permissions, plugin marketplaces, public API, offline-first synchronization, and advanced video processing.
+
+Direct import from TikTok/Instagram/YouTube Shorts or similar video platforms (User Story 9) is fully researched (research.md R14) and planned as tasks.md Phase 11.75, but remains out of scope until its open questions are explicitly approved — the interim behavior is a clear "unsupported, paste the caption instead" message rather than an attempted, failure-prone extraction.

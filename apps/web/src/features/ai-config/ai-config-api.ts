@@ -6,6 +6,22 @@ export const DEFAULT_AI_PROVIDER = 'openai';
 export const DEFAULT_AI_MODEL = 'gpt-4o-mini';
 export const DEFAULT_AI_BASE_URL = 'https://api.openai.com/v1';
 
+export interface SupportedAiModelOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+/** T101: the model field is a controlled dropdown of supported OpenAI
+ * models rather than free text. Keep this list small and reviewed — it is
+ * not meant to track every upstream model release automatically. */
+export const SUPPORTED_AI_MODELS: readonly SupportedAiModelOption[] = [
+  { value: 'gpt-4o-mini', label: 'GPT-4o mini (default)' },
+  { value: 'gpt-4o', label: 'GPT-4o' },
+  { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
+  { value: 'gpt-4.1', label: 'GPT-4.1' },
+  { value: 'gpt-4.1-nano', label: 'GPT-4.1 nano' },
+];
+
 const configuredAiConfigurationSchema = z.object({
   configured: z.literal(true),
   provider: z.string().min(1),

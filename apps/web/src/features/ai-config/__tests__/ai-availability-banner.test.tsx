@@ -6,9 +6,10 @@ import { AiAvailabilityBanner } from '@/features/ai-config';
 
 function renderBanner(
   overrides: Partial<Parameters<typeof AiAvailabilityBanner>[0]> = {},
+  initialEntries: string[] = ['/'],
 ) {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <AiAvailabilityBanner
         capability="recipe generation"
         configuration={{ configured: false }}
@@ -19,6 +20,21 @@ function renderBanner(
 }
 
 describe('AiAvailabilityBanner', () => {
+  it('does not render on the Settings route, which already shows AI status directly (T100)', () => {
+    renderBanner({ configuration: { configured: false } }, ['/settings']);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('still renders on AI-dependent routes outside Settings (T100)', () => {
+    renderBanner({ configuration: { configured: false } }, ['/recipes/123']);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /configure ai in settings to use recipe generation/i,
+    );
+  });
+
   it('renders a loading status while configuration is being checked', () => {
     renderBanner({ configuration: null, isLoading: true });
 

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 
@@ -11,6 +11,11 @@ interface AiAvailabilityBannerProps {
   error?: string | null;
 }
 
+/** The Settings page already presents this status directly; a banner that
+ * tells the user to "open Settings" while they are already there is
+ * redundant self-navigation (T100). */
+const SELF_REFERENTIAL_ROUTE = '/settings';
+
 function providerLabel(provider: string): string {
   if (provider === 'openai') return 'OpenAI';
   return provider;
@@ -22,6 +27,11 @@ export function AiAvailabilityBanner({
   isLoading = false,
   error = null,
 }: AiAvailabilityBannerProps) {
+  const location = useLocation();
+  if (location.pathname === SELF_REFERENTIAL_ROUTE) {
+    return null;
+  }
+
   if (isLoading) {
     return (
       <div

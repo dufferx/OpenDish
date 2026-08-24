@@ -120,10 +120,12 @@ describe('RecipeConversation', () => {
 
   it('renders persistent history with saved user and AI content distinguished', async () => {
     renderConversation();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /open chat/i }));
 
     expect(await screen.findByText('Can I freeze this?')).toBeVisible();
     expect(screen.getByText('Yes, freeze it after cooling.')).toBeVisible();
-    expect(screen.getByText('AI response')).toBeVisible();
+    expect(screen.getAllByText('OpenDish AI').length).toBeGreaterThan(0);
     expect(
       screen.getByRole('radio', { name: /Answer a question/i }),
     ).toBeChecked();
@@ -135,6 +137,7 @@ describe('RecipeConversation', () => {
   it('sends the user-selected modification intent explicitly', async () => {
     const user = userEvent.setup();
     renderConversation();
+    await user.click(screen.getByRole('button', { name: /open chat/i }));
     await screen.findByText('Can I freeze this?');
 
     await user.click(
@@ -167,6 +170,8 @@ describe('RecipeConversation', () => {
       },
     ];
     renderConversation();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /open chat/i }));
 
     expect(await screen.findByText('Can I freeze this?')).toBeVisible();
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -187,15 +192,15 @@ describe('RecipeConversation', () => {
     );
     const user = userEvent.setup();
     renderConversation();
+    await user.click(screen.getByRole('button', { name: /open chat/i }));
     await screen.findByText('Can I freeze this?');
 
     await user.type(screen.getByLabelText('Message'), 'Explain the sauce');
     await user.click(screen.getByRole('button', { name: /Ask AI/i }));
 
     expect(screen.getByLabelText('Message')).toBeDisabled();
-    expect(
-      screen.getByRole('button', { name: /Waiting for AI/i }),
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Ask AI/i })).toBeDisabled();
+    expect(screen.getByText('Waiting for AI…')).toBeInTheDocument();
     const cancel = screen.getByRole('button', { name: /Cancel request/i });
     expect(cancel).toBeEnabled();
     await user.click(cancel);
@@ -223,6 +228,8 @@ describe('RecipeConversation', () => {
     ];
 
     renderConversation();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /open chat/i }));
 
     expect(await screen.findByText('Can I freeze this?')).toBeVisible();
     expect(screen.getByTestId('ai-availability-banner')).toHaveTextContent(

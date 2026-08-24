@@ -273,6 +273,41 @@ describe('import-recipe handler', () => {
       expect(body.error.code).toBe('fetch_failed');
     });
 
+    it('returns unsupported_url for Instagram links without fetching or calling AI', async () => {
+      const provider = new FakeAiProvider();
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider,
+        safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
+        aiConfigReader: fakeAiConfigReader({
+          apiKey: 'sk-test',
+          model: 'gpt-4o-mini',
+        }),
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.instagram.com/reel/Da5N3vyovxI/' }),
+      );
+      expect(response.status).toBe(422);
+      const body = await response.json();
+      expect(body.error.code).toBe('unsupported_url');
+      expect(provider.calls).toHaveLength(0);
+    });
+
+    it('returns unsupported_url for YouTube Shorts links', async () => {
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider: new FakeAiProvider(),
+        safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
+        aiConfigReader: fakeAiConfigReader(null),
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.youtube.com/shorts/abc123' }),
+      );
+      expect(response.status).toBe(422);
+      const body = await response.json();
+      expect(body.error.code).toBe('unsupported_url');
+    });
+
     it('propagates SSRF blocked_address as unsupported_url', async () => {
       const handler = createImportRecipeHandler({
         verifyAuth: authVerifier(),

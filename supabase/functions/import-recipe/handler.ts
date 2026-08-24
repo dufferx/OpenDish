@@ -111,6 +111,43 @@ export function createSafeFetch(): (
   };
 }
 
+// Social platforms whose pages require a login/JS session to render, so a
+// server-side fetch only ever sees an empty app shell (no caption, no
+// og:description). Import from these is out of scope (see spec); detect them
+// up front so the failure is a clear, actionable message instead of the
+// generic "schema mismatch" produced by feeding the AI an empty page.
+const UNSUPPORTED_SOCIAL_HOSTS = new Set([
+  'instagram.com',
+  'www.instagram.com',
+  'tiktok.com',
+  'www.tiktok.com',
+  'facebook.com',
+  'www.facebook.com',
+  'fb.watch',
+]);
+
+const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com']);
+
+function isUnsupportedSocialUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (UNSUPPORTED_SOCIAL_HOSTS.has(hostname)) {
+    return true;
+  }
+  return YOUTUBE_HOSTS.has(hostname) && url.pathname.startsWith('/shorts/');
+}
+
+const UNSUPPORTED_SOCIAL_MESSAGE =
+  'Instagram, TikTok, Facebook, and YouTube Shorts links can’t be ' +
+  'imported directly — these sites don’t expose the recipe as ' +
+  'fetchable text. Open the post, copy the caption, and use "Paste text" ' +
+  'instead.';
+
 /** Strips scripts, styles, and tags, leaving sanitized page text for the AI. */
 export function sanitizeHtmlForAi(html: string): string {
   return html
@@ -193,6 +230,10 @@ export function createImportRecipeHandler(options: ImportRecipeOptions) {
     verifyAuth: options.verifyAuth,
     handler: async (body, ctx) => {
       if (body.mode === 'url') {
+        if (isUnsupportedSocialUrl(body.url)) {
+          return errorResponse(422, 'unsupported_url', UNSUPPORTED_SOCIAL_MESSAGE);
+        }
+
         const fetchResult = await options.safeFetch(body.url);
         if (!fetchResult.ok) {
           return errorResponse(

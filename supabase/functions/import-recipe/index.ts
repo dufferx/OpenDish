@@ -68,7 +68,8 @@ const aiConfigReader: AiConfigReader = {
   },
 };
 
-const VIDEO_IMPORT_TIMEOUT_MS = 10_000;
+// Keep enough margin for a cold container plus bounded yt-dlp retries.
+const VIDEO_IMPORT_TIMEOUT_MS = 30_000;
 const VIDEO_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 
 const videoImport: VideoImportClient = {

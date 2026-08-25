@@ -95,4 +95,44 @@ describe('yt-dlp metadata fetcher', () => {
       },
     });
   });
+
+  it('retries transient rate limits once and succeeds', async () => {
+    const runCommand = vi.fn()
+      .mockResolvedValueOnce({ ok: false, code: 'exit', stderr: 'ERROR: rate-limit reached' })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: JSON.stringify({ title: 'Recovered recipe', description: 'Caption available.' }),
+        stderr: '',
+      });
+    const fetcher = createYtDlpMetadataFetcher({ runCommand, retryBaseDelayMs: 0, logger: () => undefined });
+
+    await expect(fetcher.fetchMetadata('https://www.instagram.com/reel/C9abc123/?igsh=tracking', 'instagram_reel'))
+      .resolves.toEqual({ ok: true, value: { title: 'Recovered recipe', description: 'Caption available.' } });
+    expect(runCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('caches successful metadata across tracking URLs', async () => {
+    const runCommand = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: JSON.stringify({ title: 'Cached recipe', description: 'Cached caption.' }),
+      stderr: '',
+    });
+    const fetcher = createYtDlpMetadataFetcher({ runCommand, logger: () => undefined });
+
+    await fetcher.fetchMetadata('https://www.instagram.com/reel/C9abc123/?igsh=first', 'instagram_reel');
+    await fetcher.fetchMetadata('https://www.instagram.com/reel/C9abc123/?igsh=second', 'instagram_reel');
+    expect(runCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a non-transient login block', async () => {
+    const runCommand = vi.fn().mockResolvedValue({
+      ok: false,
+      code: 'exit',
+      stderr: 'ERROR: login required and forbidden 403',
+    });
+    const fetcher = createYtDlpMetadataFetcher({ runCommand, retryBaseDelayMs: 0, logger: () => undefined });
+
+    await fetcher.fetchMetadata('https://www.instagram.com/reel/C9abc123/', 'instagram_reel');
+    expect(runCommand).toHaveBeenCalledTimes(1);
+  });
 });

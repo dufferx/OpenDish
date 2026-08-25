@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Loader2Icon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -134,9 +135,18 @@ export function ImportRecipePage() {
 
   return (
     <section className="flex flex-col gap-6" aria-labelledby="import-title">
-      <h1 id="import-title" className="text-2xl font-semibold tracking-tight">
-        Import a recipe
-      </h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 id="import-title" className="text-2xl font-semibold tracking-tight">
+          Import a recipe
+        </h1>
+        <Badge variant="outline">Experimental</Badge>
+      </div>
+
+      <p className="-mt-3 text-sm text-muted-foreground">
+        Import works best with pasted recipe text or captions. Direct imports
+        from websites and social videos may be unavailable or incomplete while
+        this feature is being validated.
+      </p>
 
       {showAiAvailabilityBanner ? (
         <AiAvailabilityBanner

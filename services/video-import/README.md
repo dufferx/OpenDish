@@ -21,7 +21,11 @@ The response is metadata-only and never downloads media bytes:
 - Enforces a strict URL allowlist for Instagram Reels, TikTok videos, and
   YouTube Shorts only
 - Requires a shared secret in the `Authorization: Bearer ...` header
-- Applies a 10 s subprocess timeout and a 2 MB stdout/stderr cap by default
+- Applies a 20 s subprocess timeout, one bounded retry for transient upstream
+  failures, and a 2 MB stdout/stderr cap by default
+- Caches successful metadata for five minutes (up to 256 URLs)
+- Emits safe structured timing/outcome logs without URLs, captions, cookies, or
+  secrets
 - Returns safe error envelopes with no cookies, secrets, or raw upstream stderr
 
 ## Environment
@@ -30,8 +34,12 @@ The response is metadata-only and never downloads media bytes:
   Supabase as `VIDEO_IMPORT_SERVICE_SECRET`
 - `PORT` (optional, default `8080`)
 - `YT_DLP_BIN` (optional, default `yt-dlp`)
-- `YT_DLP_TIMEOUT_MS` (optional, default `10000`)
+- `YT_DLP_TIMEOUT_MS` (optional, default `20000`)
 - `YT_DLP_MAX_OUTPUT_BYTES` (optional, default `2097152`)
+- `YT_DLP_MAX_ATTEMPTS` (optional, default `2`)
+- `YT_DLP_RETRY_BASE_DELAY_MS` (optional, default `350`)
+- `VIDEO_METADATA_CACHE_TTL_MS` (optional, default `300000`; set to `0` to disable)
+- `VIDEO_METADATA_CACHE_MAX_ENTRIES` (optional, default `256`)
 
 ## Local Run
 

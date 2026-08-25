@@ -63,20 +63,40 @@ export interface YtDlpMetadataFetcherOptions {
   command?: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  maxAttempts?: number;
+  retryBaseDelayMs?: number;
+  cacheTtlMs?: number;
+  cacheMaxEntries?: number;
   runCommand?: RunCommand;
+  sleep?: (delayMs: number) => Promise<void>;
+  now?: () => number;
+  logger?: (event: MetadataLogEvent) => void;
 }
 
-const DEFAULT_TIMEOUT_MS = 10_000;
-const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+export interface MetadataLogEvent {
+  event: 'metadata_attempt' | 'metadata_result';
+  platform: SupportedVideoPlatform;
+  attempt: number;
+  durationMs: number;
+  outcome: 'attempt' | 'success' | 'retry' | 'failure' | 'cache_hit';
+  errorCode?: VideoMetadataErrorCode;
+}
 
-function ok(value: VideoMetadata): VideoMetadataResult {
+const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_ATTEMPTS = 2;
+const DEFAULT_RETRY_BASE_DELAY_MS = 350;
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_CACHE_MAX_ENTRIES = 256;
+
+function ok(value: VideoMetadata): { ok: true; value: VideoMetadata } {
   return { ok: true, value };
 }
 
 function fail(
   code: VideoMetadataErrorCode,
   message: string,
-): VideoMetadataResult {
+): { ok: false; error: VideoMetadataError } {
   return { ok: false, error: { code, message } };
 }
 
@@ -138,6 +158,43 @@ function mapExitFailure(stderr: string): VideoMetadataError {
     code: 'upstream_failed',
     message: 'The upstream platform metadata request failed.',
   };
+}
+
+function isRetryableFailure(result: RunCommandFailure): boolean {
+  if (result.code === 'timeout') return true;
+  if (result.code !== 'exit') return false;
+
+  const normalized = result.stderr.toLowerCase();
+  return [
+    'rate-limit',
+    'rate limit',
+    'too many requests',
+    'http error 429',
+    'temporarily unavailable',
+    'connection reset',
+    'connection timed out',
+    'temporary failure',
+  ].some((marker) => normalized.includes(marker));
+}
+
+function canonicalizeUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    url.hash = '';
+    url.search = '';
+    url.hostname = url.hostname.toLowerCase();
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function defaultSleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function defaultLogger(event: MetadataLogEvent): void {
+  console.info(JSON.stringify(event));
 }
 
 export async function defaultRunCommand(
@@ -204,57 +261,86 @@ export function createYtDlpMetadataFetcher(
   const command = options.command ?? 'yt-dlp';
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+  const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
+  const retryBaseDelayMs = Math.max(0, options.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS);
+  const cacheTtlMs = Math.max(0, options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS);
+  const cacheMaxEntries = Math.max(1, options.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES);
   const runCommand = options.runCommand ?? defaultRunCommand;
+  const sleep = options.sleep ?? defaultSleep;
+  const now = options.now ?? Date.now;
+  const logger = options.logger ?? defaultLogger;
+  const cache = new Map<string, { expiresAt: number; value: VideoMetadata }>();
 
   return {
-    async fetchMetadata(url) {
-      const result = await runCommand({
-        command,
-        timeoutMs,
-        maxOutputBytes,
-        args: [
-          '--dump-json',
-          '--skip-download',
-          '--no-playlist',
-          '--no-warnings',
-          '--socket-timeout',
-          String(Math.max(1, Math.ceil(timeoutMs / 1000))),
-          url,
-        ],
-      });
+    async fetchMetadata(url, platform) {
+      const cacheKey = canonicalizeUrl(url);
+      const cached = cache.get(cacheKey);
+      if (cached && cached.expiresAt > now()) {
+        logger({ event: 'metadata_result', platform, attempt: 0, durationMs: 0, outcome: 'cache_hit' });
+        return ok(cached.value);
+      }
+      if (cached) cache.delete(cacheKey);
 
-      if (!result.ok) {
-        if (result.code === 'timeout') {
-          return fail(
-            'timeout',
-            'The metadata extraction request timed out.',
-          );
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const startedAt = now();
+        logger({ event: 'metadata_attempt', platform, attempt, durationMs: 0, outcome: 'attempt' });
+        const result = await runCommand({
+          command,
+          timeoutMs,
+          maxOutputBytes,
+          args: [
+            '--dump-json',
+            '--skip-download',
+            '--no-playlist',
+            '--no-warnings',
+            '--socket-timeout',
+            String(Math.max(1, Math.ceil(timeoutMs / 1000))),
+            url,
+          ],
+        });
+
+        if (result.ok) {
+          const metadata = safeParseMetadata(result.stdout);
+          if (metadata) {
+            if (cacheTtlMs > 0) {
+              if (cache.size >= cacheMaxEntries) {
+                const oldestKey = cache.keys().next().value;
+                if (oldestKey) cache.delete(oldestKey);
+              }
+              cache.set(cacheKey, { expiresAt: now() + cacheTtlMs, value: metadata });
+            }
+            logger({ event: 'metadata_result', platform, attempt, durationMs: Math.max(0, now() - startedAt), outcome: 'success' });
+            return ok(metadata);
+          }
         }
-        if (result.code === 'response_too_large') {
-          return fail(
-            'response_too_large',
-            'The metadata extraction response was too large.',
-          );
+
+        if (!result.ok && isRetryableFailure(result) && attempt < maxAttempts) {
+          const errorCode = result.code === 'timeout' ? 'timeout' : mapExitFailure(result.stderr).code;
+          logger({ event: 'metadata_result', platform, attempt, durationMs: Math.max(0, now() - startedAt), outcome: 'retry', errorCode });
+          await sleep(retryBaseDelayMs * 2 ** (attempt - 1));
+          continue;
         }
-        if (result.code === 'spawn') {
-          return fail(
-            'upstream_failed',
-            'The metadata extractor is unavailable on this service instance.',
-          );
+
+        let failure: VideoMetadataResult;
+        if (!result.ok) {
+          if (result.code === 'timeout') {
+            failure = fail('timeout', 'The metadata extraction request timed out.');
+          } else if (result.code === 'response_too_large') {
+            failure = fail('response_too_large', 'The metadata extraction response was too large.');
+          } else if (result.code === 'spawn') {
+            failure = fail('upstream_failed', 'The metadata extractor is unavailable on this service instance.');
+          } else {
+            const exitFailure = mapExitFailure(result.stderr);
+            failure = fail(exitFailure.code, exitFailure.message);
+          }
+        } else {
+          failure = fail('upstream_failed', 'The metadata extractor returned an invalid response.');
         }
-        const exitFailure = mapExitFailure(result.stderr);
-        return fail(exitFailure.code, exitFailure.message);
+        logger({ event: 'metadata_result', platform, attempt, durationMs: Math.max(0, now() - startedAt), outcome: 'failure', errorCode: failure.error.code });
+        return failure;
       }
 
-      const metadata = safeParseMetadata(result.stdout);
-      if (!metadata) {
-        return fail(
-          'upstream_failed',
-          'The metadata extractor returned an invalid response.',
-        );
-      }
-
-      return ok(metadata);
+      return fail('upstream_failed', 'The metadata request failed.');
     },
   };
 }

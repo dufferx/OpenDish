@@ -135,9 +135,9 @@ tests/
 | FR-031 degradation | Fake provider failure → core flows unaffected |
 | E2E (Playwright) | SC-001 primary flow, SC-002 generation flow, login gate |
 
-## Planned Architecture Extension (Pending Approval): Social Media Video Import
+## Approved Architecture Extension: Social Media Video Import
 
-User Story 9 / tasks.md Phase 11.75 (import from Instagram/TikTok/YouTube Shorts, research.md R14) would be the first feature requiring a component outside this plan's architecture: `yt-dlp` + `ffmpeg` need subprocess execution, which Supabase Edge Functions (Deno Deploy) cannot do. It would require a new, separately hosted HTTP microservice — the first departure from "Supabase + independently hosted static frontend, nothing else" and from the "Zero/near-zero hosting cost" constraint above. This is deliberately **not** reflected in the directory structure or Edge Function list below until research.md R14's open questions are explicitly approved; see tasks.md Phase 11.75 for the gated task breakdown.
+User Story 9 / tasks.md Phase 11.75 is approved for Instagram Reels, TikTok videos, and YouTube Shorts. It requires the first component outside this plan's original architecture: `yt-dlp` + `ffmpeg` need subprocess execution, which Supabase Edge Functions cannot provide reliably. The approved extension is a small, separately hosted, version-pinned HTTP microservice that returns metadata/description to the existing `import-recipe` Edge Function. This remains subject to the existing zero/near-zero-cost hosting preference, security controls, request limits, and mandatory review flow. Audio transcription and Instagram cookie custody are future/out-of-scope extensions, not part of this phase.
 
 ## Remaining Open Decisions
 

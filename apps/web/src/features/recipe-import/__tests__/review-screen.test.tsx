@@ -105,6 +105,13 @@ describe('ReviewScreen (T040)', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the video metadata indicator when extractionMethod is video_metadata', () => {
+    renderReviewScreen({ extractionMethod: 'video_metadata' });
+    expect(
+      screen.getByText(/Extracted from a video caption or description/i),
+    ).toBeInTheDocument();
+  });
+
   it('applies user edits and saves the edited draft with origin imported', async () => {
     const { user } = renderReviewScreen();
 
@@ -158,6 +165,13 @@ describe('ReviewScreen (T040)', () => {
 
   it('shows the AI estimate note for AI-extracted drafts', () => {
     renderReviewScreen({ origin: 'imported', extractionMethod: 'ai' });
+    expect(
+      screen.getByText(/AI-generated values are estimates, please review/i),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the AI estimate note for video metadata drafts', () => {
+    renderReviewScreen({ origin: 'imported', extractionMethod: 'video_metadata' });
     expect(
       screen.getByText(/AI-generated values are estimates, please review/i),
     ).toBeInTheDocument();

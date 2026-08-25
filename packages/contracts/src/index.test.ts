@@ -6,6 +6,7 @@ describe('@opendish/contracts', () => {
   it('re-exports the schemas, helpers, and test utilities', () => {
     expect(contracts.recipeDraftSchema).toBeDefined();
     expect(contracts.recipeSnapshotSchema).toBeDefined();
+    expect(contracts.recipeImportExtractionMethodSchema).toBeDefined();
     expect(contracts.modificationProposalSchema).toBeDefined();
     expect(contracts.chatOutcomeSchema).toBeDefined();
     expect(contracts.shoppingListItemSchema).toBeDefined();

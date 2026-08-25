@@ -431,43 +431,42 @@ description: "Task list for 001-ai-recipe-manager"
 
 ---
 
-## Phase 11.75: Social Media Video Recipe Import (`yt-dlp`) — Planning Complete, Implementation Gated
+## Phase 11.75: Social Media Video Recipe Import (`yt-dlp`) — Scope Approved
 
-**Purpose**: Let users import recipes from Instagram Reels, TikTok videos, and YouTube Shorts whose recipe lives in the caption or spoken narration, by fetching content the way real open-source recipe managers do (`yt-dlp`) instead of the plain HTTP fetch `import-recipe` uses today — which Instagram in particular defeats with a login wall. Full investigation: research.md R14. User story: spec.md User Story 9.
+**Purpose**: Let users import recipes from Instagram Reels, TikTok videos, and YouTube Shorts whose recipe lives in the caption or description, by fetching content with `yt-dlp` instead of the plain HTTP fetch `import-recipe` uses today. All three platforms are in scope for this phase without an intentional product limitation. Audio transcription is explicitly deferred to a future phase. Full investigation: research.md R14. User story: spec.md User Story 9.
 
-**⚠️ APPROVAL GATE — DO NOT START THE IMPLEMENTATION TASKS BELOW WITHOUT EXPLICIT USER SIGN-OFF ON THE SCOPE DECISION.** Unlike every other phase in this document, this phase requires a product decision, not just an engineering estimate: it is the first feature needing infrastructure outside Supabase + static frontend, and (if Instagram is included) custody of the user's own platform session cookies. research.md R14 lists four open questions that MUST be answered and recorded below before any `[ ]` implementation task in this phase is started. Until then, the interim behavior is the Phase 11.5 hotfix already shipped: `import-recipe` recognizes Instagram/TikTok/Facebook/YouTube Shorts URLs and returns a clear "not supported, paste the caption instead" message instead of attempting extraction (`isUnsupportedSocialUrl` in `supabase/functions/import-recipe/handler.ts`).
+**✅ SCOPE APPROVED**: The user explicitly approved implementation for Instagram Reels, TikTok videos, and YouTube Shorts using an external `yt-dlp` microservice. The implementation must remain within the existing security, privacy, validation, BYOK, cost-conscious hosting, and mandatory-review constraints. No platform is intentionally excluded from this phase, but upstream platform changes or blocking may still produce a clear, recoverable import failure. The interim Phase 11.5 rejection remains only until these tasks are implemented.
 
-### Scope decision (record answers here before implementation begins)
+### Scope decision (approved 2026-08-24)
 
-- [ ] D1 Approved platform scope: TikTok + YouTube Shorts only, or also Instagram (cookie-based)?
-- [ ] D2 Approved hosting target and budget for the new external microservice (Fly.io / Render / Cloud Run / other)?
-- [ ] D3 Approved Whisper-transcript-fallback policy: always attempt / opt-in only / not included in this phase's v1?
-- [ ] D4 If Instagram is in scope: approved cookie custody model (where stored, expiry/rotation UX, explicit user consent copy)?
+- [x] D1 Approved platform scope: Instagram Reels + TikTok videos + YouTube Shorts. All three use the same metadata-first `yt-dlp` path; Instagram cookies are not a prerequisite and cookie custody is not part of this phase.
+- [x] D2 Approved architecture constraint: use a separately hosted, version-pinned HTTP microservice because `yt-dlp`/`ffmpeg` cannot be embedded in the existing Supabase Edge Function. Hosting must remain within the project's existing zero/near-zero-cost preference; the concrete provider is a deployment detail.
+- [x] D3 Approved transcript policy: audio transcription is not included in Phase 11.75. It is a future enhancement after metadata-only extraction is validated.
+- [x] D4 Instagram cookie custody: not applicable to the approved Phase 11.75 scope. The phase must not require storing or transmitting Instagram session cookies.
 
 ### Tests for this phase
 
-- [ ] T111 [P] Contract test: video-import microservice HTTP contract (metadata-only success, transcript-fallback success, unsupported-platform error, upstream-blocked error) against a fixture/mock server — no live network calls
-- [ ] T112 [P] Contract test: `import-recipe` extends the existing `isUnsupportedSocialUrl` routing to call the new service for approved platforms while still returning the clear message for any platform not in scope per D1
-- [ ] T113 [P] Security test: any cookie credentials (if D1 includes Instagram) are never logged, never returned by any API, and stored only via the same Vault pattern as `ai-configure` (T028)
+- [x] T111 [P] Contract test: video-import microservice HTTP contract (metadata-only success, unsupported-platform error, upstream-blocked error) against a fixture/mock server — no live network calls
+- [x] T112 [P] Contract test: `import-recipe` routes Instagram, TikTok, and YouTube Shorts to the new service while still returning the clear message for platforms outside the approved set
+- [x] T113 [P] Security test: the metadata-only social import path never accepts, logs, returns, or persists platform session cookies; shared service authentication is never exposed to the client
 
-### Implementation — Track A: metadata-only import (TikTok, YouTube Shorts)
+### Implementation — Track A: metadata-only import (Instagram, TikTok, YouTube Shorts)
 
-- [ ] T114 Stand up the version-pinned `yt-dlp` + `ffmpeg` microservice (per D2) exposing one authenticated HTTP endpoint that accepts a URL and returns `{ title, description }` via `--dump-json --skip-download`, with request timeouts and response size limits mirroring `safe-fetch.ts`'s existing discipline
-- [ ] T115 Extend `supabase/functions/import-recipe/handler.ts` so recognized video-platform URLs call the new service (shared secret) instead of the "unsupported" short-circuit, feeding the returned description into the existing, unmodified `extractRecipe` AI pipeline
-- [ ] T116 Add an `extractionMethod: 'video_transcript'` (or `'video_metadata'` when no transcript was used) value to the import result contract in `packages/contracts` and the review screen's extraction-method indicator (T043)
-- [ ] T117 Update the import UI hint copy (`import-recipe-page.tsx`) to reflect which platforms are newly supported per D1, keeping the clear "unsupported" message for everything still out of scope
+- [x] T114 Stand up the version-pinned `yt-dlp` microservice (per D2; `ffmpeg` is reserved for future transcription) exposing one authenticated HTTP endpoint that accepts a URL and returns `{ title, description }` via `--dump-json --skip-download`, with request timeouts and response size limits mirroring `safe-fetch.ts`'s existing discipline
+- [x] T115 Extend `supabase/functions/import-recipe/handler.ts` so recognized video-platform URLs call the new service (shared secret) instead of the "unsupported" short-circuit, feeding the returned description into the existing, unmodified `extractRecipe` AI pipeline
+- [x] T116 Add an `extractionMethod: 'video_metadata'` value to the import result contract in `packages/contracts` and the review screen's extraction-method indicator (T043)
+- [x] T117 Update the import UI hint copy (`import-recipe-page.tsx`) to reflect which platforms are newly supported per D1, keeping the clear "unsupported" message for everything still out of scope
 
-### Implementation — Track B: audio-transcript fallback (only if D3 approves it)
+### Future work — Track B: audio-transcript fallback (outside Phase 11.75)
 
-- [ ] T118 Extend the microservice to fall back to `-x --audio-format mp3` audio extraction when description-only extraction yields no usable recipe, capped to short-form video durations
-- [ ] T119 Send extracted audio to the user's configured OpenAI Whisper endpoint (reusing existing BYOK credentials from `ai-configure`); surface the estimated added latency/cost to the user before triggering this path, per FR-042
+- [ ] T118 [FUTURE] Extend the microservice to fall back to `-x --audio-format mp3` audio extraction when description-only extraction yields no usable recipe, capped to short-form video durations
+- [ ] T119 [FUTURE] Send extracted audio to the user's configured OpenAI transcription endpoint (reusing existing BYOK credentials from `ai-configure`); surface the estimated added latency/cost before triggering this path, per FR-042
 
-### Implementation — Track C: Instagram cookie-based support (only if D1/D4 approve it)
+### Track C: Instagram cookies — explicitly excluded from Phase 11.75
 
-- [ ] T120 Design and implement user-supplied Instagram session cookie storage via Supabase Vault, following the exact non-exposure pattern of `ai-configure` (T028), including explicit consent copy about account risk, per FR-043
-- [ ] T121 Wire cookie-based requests through the microservice for Instagram URLs only; document the expected reliability ceiling (best-effort, not guaranteed — research.md R14 risk 4) directly in the failure message shown to users
+- T120/T121 are not part of the approved phase. Instagram import must not require, collect, or store session cookies. If future platform behavior makes cookies necessary for a later enhancement, that work requires a separate security and product decision.
 
-**Checkpoint**: Only the tracks actually approved in the scope decision need to be green for this phase to close; unapproved tracks stay unchecked by design and do not block Phase 12/13.
+**Checkpoint**: T111–T117 must be green for Phase 11.75 to close. T118–T119 remain explicitly deferred future work and do not block phase completion. T120–T121 are excluded from this phase. Every supported platform uses the same mandatory review flow, and no import persists data before explicit user save.
 
 ---
 
@@ -508,7 +507,7 @@ description: "Task list for 001-ai-recipe-manager"
 - **User Stories 7–8 (Phases 9–10)**: depend on Foundational plus Portable Foundation
 - **Polish (Phase 11)**: depends on all desired stories and Portable Foundation being complete
 - **Iterative UI/UX Review (Phase 11.5)**: begins after the Phase 11 baseline and is driven by documented user feedback from the running Codex app; it may proceed independently of Phases 12–13
-- **Social Media Video Import (Phase 11.75)**: fully planned (research.md R14) but explicitly gated behind an out-of-band product/scope approval; independent of Phases 12–13 and does not block managed or self-hosted distribution either way
+- **Social Media Video Import (Phase 11.75)**: approved for all three platforms with the metadata-first `yt-dlp` path; independent of Phases 12–13 and does not block managed or self-hosted distribution either way
 - **Managed Cloud Distribution (Phase 12)**: depends on Phase 11 release readiness
 - **Advanced Self-Hosted Distribution (Phase 13)**: depends on Phase 11 and the stable portable contract; it follows the managed reference path but does not depend on Supabase Cloud at runtime
 
@@ -568,14 +567,14 @@ Task: "Recipe save path in apps/web/src/domain/recipe-save.ts"     # T024
 7. US7–US8 → validate each → v1 feature-complete
 8. Polish → full quality gates
 9. Iterative UI/UX review in Codex → document, approve, implement, and verify each accepted adjustment
-10. Social media video import (gated) → answer research.md R14's open questions, record the scope decision, then implement only the approved tracks
+10. Social media video import → implement the approved all-platform metadata-first path, then validate the future transcription boundary
 11. Managed Cloud distribution/reference deployment
 12. Advanced self-hosted distribution
 
 ### Notes
 
 - No tasks exist for out-of-scope items (social features, meal planning, pantry, multi-provider, multi-list, i18n infra, RAG) — constitution YAGNI
-- Phase 11.75 (social media video import) is fully planned but explicitly gated behind product approval of research.md R14's four open questions (platform scope, hosting budget, Whisper-fallback policy, Instagram cookie custody) — it is not part of the default execution path and MUST NOT be started without that approval recorded in the phase's scope-decision checklist
+- Phase 11.75 (social media video import) is approved for Instagram Reels, TikTok videos, and YouTube Shorts through the metadata-first `yt-dlp` path. Audio transcription and cookie-based Instagram access are explicitly future work; implementation remains subject to the existing security, validation, hosting-cost, and mandatory-review constraints.
 - T081/T082 were appended during `/speckit.analyze` remediation (FR-035 coverage) and live inside their story phases despite the higher IDs
 - Every recipe write goes through the single domain save path (T024) — this is how "every saved change creates history" stays structural
 - All automated tests use the fake provider (T027); live AI calls happen only in manual verification

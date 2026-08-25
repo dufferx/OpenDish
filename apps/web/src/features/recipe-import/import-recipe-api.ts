@@ -1,8 +1,11 @@
-import type { RecipeDraft } from '@opendish/contracts';
+import type {
+  RecipeDraft,
+  RecipeImportExtractionMethod,
+} from '@opendish/contracts';
 
 import { supabase } from '@/lib/supabase';
 
-export type ExtractionMethod = 'structured_markup' | 'ai';
+export type ExtractionMethod = RecipeImportExtractionMethod;
 
 export interface ImportResult {
   draft: RecipeDraft;

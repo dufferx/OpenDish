@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import { AlertTriangleIcon, BotIcon, FileTextIcon } from 'lucide-react';
+import {
+  AlertTriangleIcon,
+  BotIcon,
+  ClapperboardIcon,
+  FileTextIcon,
+} from 'lucide-react';
 
 import type { RecipeDraft } from '@opendish/contracts';
 
@@ -40,6 +45,15 @@ function bannerForOrigin(
       description:
         'The page published standard recipe markup. You can still edit anything before saving.',
       variant: 'info' as const,
+    };
+  }
+  if (extractionMethod === 'video_metadata') {
+    return {
+      icon: ClapperboardIcon,
+      title: 'Extracted from a video caption or description',
+      description:
+        'This draft came from Instagram Reels, TikTok, or YouTube Shorts metadata and was structured by AI. Review every field before saving.',
+      variant: 'warning' as const,
     };
   }
   return {
@@ -99,7 +113,9 @@ export function ReviewScreen({
       ? 'Discard and return to conversation'
       : 'Discard and start over';
   const showAiEstimateNote =
-    origin === 'ai_generated' || extractionMethod === 'ai';
+    origin === 'ai_generated' ||
+    extractionMethod === 'ai' ||
+    extractionMethod === 'video_metadata';
 
   return (
     <section className="flex flex-col gap-6" aria-labelledby="review-title">

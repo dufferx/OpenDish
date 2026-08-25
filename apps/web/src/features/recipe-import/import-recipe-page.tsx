@@ -26,7 +26,7 @@ type Tab = 'url' | 'text';
 const ERROR_TITLES: Record<ImportErrorCode, string> = {
   no_recipe_found: 'No recipe found',
   unsupported_url: 'Unsupported URL',
-  fetch_failed: 'Could not fetch the page',
+  fetch_failed: 'Could not fetch the source',
   ai_not_configured: 'AI is not configured',
   invalid_ai_output: 'Extracted recipe was invalid',
   provider_error: 'AI provider error',
@@ -174,10 +174,13 @@ export function ImportRecipePage() {
               disabled={isLoading}
             />
             <p className="text-xs text-muted-foreground">
-              Supports recipe pages with structured markup. Pages without it
-              require AI to be configured in settings. Instagram, TikTok,
-              Facebook, and YouTube Shorts links aren't supported — copy the
-              caption and use "Paste text" instead.
+              Supports recipe pages with structured markup, plus public
+              Instagram Reels, TikTok videos, and YouTube Shorts when the
+              recipe is in the caption or description. Other social links stay
+              unsupported, and pages without structured data still require AI
+              in settings. If a video import is blocked or the caption is too
+              thin, copy the caption or description and use "Paste text"
+              instead.
             </p>
           </div>
         ) : (

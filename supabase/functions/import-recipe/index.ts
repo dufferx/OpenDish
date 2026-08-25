@@ -9,6 +9,8 @@ import {
   createImportRecipeHandler,
   createSafeFetch,
   type AiConfigReader,
+  type ImportErrorCode,
+  type VideoImportClient,
 } from './handler.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -27,6 +29,8 @@ const serviceClient = createClient(supabaseUrl, serviceRoleKey, clientOptions);
 const verifyAuth = createAuthVerifier(authClient);
 const provider = createOpenAiProvider();
 const safeFetch = createSafeFetch();
+const videoImportServiceUrl = Deno.env.get('VIDEO_IMPORT_SERVICE_URL') ?? '';
+const videoImportServiceSecret = Deno.env.get('VIDEO_IMPORT_SERVICE_SECRET') ?? '';
 
 const aiConfigReader: AiConfigReader = {
   async getConfig(userId) {
@@ -64,11 +68,117 @@ const aiConfigReader: AiConfigReader = {
   },
 };
 
+const VIDEO_IMPORT_TIMEOUT_MS = 10_000;
+const VIDEO_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+
+const videoImport: VideoImportClient = {
+  async fetchMetadata(url) {
+    if (!videoImportServiceUrl || !videoImportServiceSecret) {
+      return {
+        ok: false,
+        errorCode: 'fetch_failed' as ImportErrorCode,
+        message:
+          'Video import is not configured on this server. Copy the caption or description and use "Paste text" instead.',
+      };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), VIDEO_IMPORT_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(
+        new URL('/metadata', videoImportServiceUrl).toString(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${videoImportServiceSecret}`,
+          },
+          body: JSON.stringify({ url }),
+          signal: controller.signal,
+        },
+      );
+
+      const rawBody = await response.text();
+      if (rawBody.length > VIDEO_IMPORT_MAX_BYTES) {
+        return {
+          ok: false,
+          errorCode: 'fetch_failed' as ImportErrorCode,
+          message:
+            'The video metadata response was too large to import safely. Copy the caption or description and use "Paste text" instead.',
+        };
+      }
+
+      let parsed: unknown = null;
+      if (rawBody.length > 0) {
+        try {
+          parsed = JSON.parse(rawBody);
+        } catch {
+          parsed = null;
+        }
+      }
+
+      if (!response.ok) {
+        const errorBody = parsed as
+          | { error?: { code?: string; message?: string } }
+          | null;
+        const errorCode = errorBody?.error?.code;
+        if (errorCode === 'unsupported_platform') {
+          return {
+            ok: false,
+            errorCode: 'unsupported_url' as ImportErrorCode,
+            message:
+              errorBody?.error?.message ??
+              'Only public Instagram Reels, TikTok videos, and YouTube Shorts links are supported.',
+          };
+        }
+        return {
+          ok: false,
+          errorCode: 'fetch_failed' as ImportErrorCode,
+          message:
+            errorBody?.error?.message ??
+            'Video metadata could not be imported. Copy the caption or description and use "Paste text" instead.',
+        };
+      }
+
+      const body = parsed as { title?: unknown; description?: unknown } | null;
+      if (
+        !body ||
+        typeof body.title !== 'string' ||
+        typeof body.description !== 'string'
+      ) {
+        return {
+          ok: false,
+          errorCode: 'fetch_failed' as ImportErrorCode,
+          message:
+            'Video metadata could not be imported. Copy the caption or description and use "Paste text" instead.',
+        };
+      }
+
+      return {
+        ok: true,
+        title: body.title,
+        description: body.description,
+      };
+    } catch {
+      return {
+        ok: false,
+        errorCode: 'fetch_failed' as ImportErrorCode,
+        message:
+          'Video metadata could not be imported. Copy the caption or description and use "Paste text" instead.',
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+};
+
 Deno.serve(
   createImportRecipeHandler({
     verifyAuth,
     provider,
     safeFetch,
     aiConfigReader,
+    videoImport,
   }),
 );

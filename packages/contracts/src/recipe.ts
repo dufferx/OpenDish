@@ -65,6 +65,15 @@ export const recipeDraftSchema = z.object({
 });
 export type RecipeDraft = z.infer<typeof recipeDraftSchema>;
 
+export const recipeImportExtractionMethodSchema = z.enum([
+  'structured_markup',
+  'ai',
+  'video_metadata',
+]);
+export type RecipeImportExtractionMethod = z.infer<
+  typeof recipeImportExtractionMethodSchema
+>;
+
 export const recipeSnapshotSchema = recipeDraftSchema.extend({
   imagePath: z.string().nullable(),
 });

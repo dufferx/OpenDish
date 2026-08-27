@@ -1,0 +1,23 @@
+OpenDish - Fase E pendiente
+
+Objetivo: verificar y preparar el rollout de la funcionalidad de macros.
+
+Pendientes:
+
+1. Ejecutar pruebas completas en desktop y mobile.
+2. Verificar alimentos genéricos, productos guardados, fuentes mixtas,
+   unidades incompatibles y edición de recetas.
+3. Confirmar el fallback de IA cuando faltan fuentes nutricionales.
+4. Revisar y recalcular recetas antiguas guardadas sin macros.
+5. Ampliar el catálogo genérico según los alimentos más usados.
+6. Añadir una etiqueta beta o feature flag para la funcionalidad nutricional.
+7. Medir errores y correcciones de macros realizadas por los usuarios.
+8. Preparar el checklist final de deploy y documentación de producción.
+
+Estado actual:
+
+- Fases A-D implementadas.
+- Cálculo local determinista funcionando.
+- Estimación AI híbrida desplegada.
+- Pantry de productos y lectura de etiquetas disponible.
+- La Fase E es principalmente validación, observabilidad y rollout.

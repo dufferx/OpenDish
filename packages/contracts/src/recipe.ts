@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { nutritionRecordSchema } from './nutrition.ts';
 
 /**
  * Exact rational quantity (R3): num/den are positive integers and the
@@ -43,6 +44,13 @@ export const ingredientSchema = z.object({
   name: z.string().min(1).max(300),
   quantity: quantitySchema.nullable(),
   unit: z.string().nullable(),
+  nutritionSource: z
+    .object({
+      sourceType: z.enum(['generic_food', 'user_product']),
+      sourceId: z.string().uuid(),
+    })
+    .nullable()
+    .optional(),
 });
 export type Ingredient = z.infer<typeof ingredientSchema>;
 
@@ -62,6 +70,7 @@ export const recipeDraftSchema = z.object({
   ingredients: z.array(ingredientSchema).min(1),
   steps: z.array(stepSchema).min(1),
   tags: z.array(z.string()),
+  nutrition: nutritionRecordSchema.nullable().optional(),
 });
 export type RecipeDraft = z.infer<typeof recipeDraftSchema>;
 

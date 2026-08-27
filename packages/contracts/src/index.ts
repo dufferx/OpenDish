@@ -3,6 +3,8 @@
 // Deno APIs) so both the Vite client and Supabase Edge Functions can
 // consume this package verbatim.
 export * from './recipe.ts';
+export * from './nutrition.ts';
+export * from './nutrition-calculator.ts';
 export * from './modification.ts';
 export * from './apply-modification.ts';
 export * from './conversation.ts';

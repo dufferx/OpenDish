@@ -1,5 +1,9 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { makeQuantity, type Quantity } from '@opendish/contracts';
+import {
+  makeQuantity,
+  type NutritionRecord,
+  type Quantity,
+} from '@opendish/contracts';
 
 import { createSupabaseRecipeStore } from '@/domain/recipe-save.ts';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +15,7 @@ export interface RecipeListItem {
   isFavorite: boolean;
   tags: string[];
   imagePath: string | null;
+  nutrition?: NutritionRecord | null;
 }
 
 export interface RecipeDetail {
@@ -42,6 +47,7 @@ export interface RecipeDetail {
   tags: string[];
   origin: string;
   headVersion: number;
+  nutrition?: NutritionRecord | null;
 }
 
 interface RawRecipeRow {
@@ -50,6 +56,30 @@ interface RawRecipeRow {
   description: string | null;
   image_path: string | null;
   is_favorite: boolean;
+  nutrition_calories: number | null;
+  nutrition_protein_grams: number | null;
+  nutrition_carbohydrates_grams: number | null;
+  nutrition_status: 'confirmed' | 'estimated' | 'missing' | null;
+}
+
+function rowToNutrition(row: RawRecipeRow): NutritionRecord | null {
+  if (
+    row.nutrition_calories === null ||
+    row.nutrition_protein_grams === null ||
+    row.nutrition_carbohydrates_grams === null ||
+    row.nutrition_status === null
+  )
+    return null;
+  return {
+    calories: Number(row.nutrition_calories),
+    proteinGrams: Number(row.nutrition_protein_grams),
+    carbohydratesGrams: Number(row.nutrition_carbohydrates_grams),
+    sourceType: 'manual',
+    sourceId: null,
+    basis: 'serving',
+    preparation: 'not_applicable',
+    status: row.nutrition_status,
+  };
 }
 
 interface RecipeTagLink {
@@ -80,7 +110,9 @@ export function useRecipes(filters: RecipeFilters) {
     queryFn: async (): Promise<RecipeListItem[]> => {
       let query = supabase
         .from('recipes')
-        .select('id, title, description, image_path, is_favorite');
+        .select(
+          'id, title, description, image_path, is_favorite, nutrition_calories, nutrition_protein_grams, nutrition_carbohydrates_grams, nutrition_status',
+        );
 
       const searchFilter = buildSearchFilter(filters.search);
       if (searchFilter) {
@@ -140,6 +172,7 @@ export function useRecipes(filters: RecipeFilters) {
         isFavorite: recipe.is_favorite,
         imagePath: recipe.image_path,
         tags: tagsByRecipeId.get(recipe.id) ?? [],
+        nutrition: rowToNutrition(recipe),
       }));
     },
     // T106: keep the previously rendered recipes on screen (instead of an
@@ -223,6 +256,7 @@ export function useRecipeDetail(recipeId: string | undefined) {
         tags: state.tags,
         origin: state.recipe.origin,
         headVersion: state.recipe.headVersion,
+        nutrition: state.recipe.nutrition ?? null,
       };
     },
     enabled: !!recipeId,

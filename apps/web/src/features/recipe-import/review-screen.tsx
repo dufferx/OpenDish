@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangleIcon,
   BotIcon,
@@ -6,11 +6,19 @@ import {
   FileTextIcon,
 } from 'lucide-react';
 
-import type { RecipeDraft } from '@opendish/contracts';
+import type { NutritionRecord, RecipeDraft } from '@opendish/contracts';
 
 import { RecipeEditorForm } from '@/features/recipe-editor';
 import type { RecipeFormValues } from '@/features/recipe-editor';
 import { useRecipeMutation } from '@/features/recipe-editor';
+import {
+  fetchNutritionSources,
+  type NutritionSourceOption,
+} from '@/features/products/nutrition-source-queries.ts';
+import {
+  estimateItemsToRecord,
+  estimateMissingNutrition,
+} from '@/features/recipes/nutrition-estimate-api.ts';
 
 import { draftToFormValues } from './draft-to-form-values.ts';
 import type { ExtractionMethod } from './import-recipe-api.ts';
@@ -73,6 +81,22 @@ export function ReviewScreen({
   onSaved,
 }: ReviewScreenProps) {
   const mutation = useRecipeMutation();
+  const [nutritionSources, setNutritionSources] = useState<
+    NutritionSourceOption[]
+  >([]);
+  useEffect(() => {
+    let active = true;
+    void fetchNutritionSources()
+      .then((sources) => {
+        if (active) setNutritionSources(sources);
+      })
+      .catch(() => {
+        // Source selection is optional; saving remains available if loading fails.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const [hasSaved, setHasSaved] = useState(false);
 
   const initialValues: RecipeFormValues = draftToFormValues(draft);
@@ -80,12 +104,31 @@ export function ReviewScreen({
   const handleSubmit = async (
     parsedDraft: RecipeDraft,
     imageFile: File | null,
+    calculatedNutrition?: NutritionRecord,
   ) => {
     if (hasSaved) return;
+
+    let nutrition = calculatedNutrition ?? parsedDraft.nutrition;
+    if (!calculatedNutrition)
+      try {
+        const items = await estimateMissingNutrition(
+          parsedDraft.ingredients.map((ingredient) => ({
+            name: ingredient.name,
+            quantity: ingredient.quantity
+              ? ingredient.quantity.num / ingredient.quantity.den
+              : null,
+            unit: ingredient.unit,
+          })),
+        );
+        nutrition = estimateItemsToRecord(items, parsedDraft.servings);
+      } catch {
+        // Saving remains available when AI is unavailable; the recipe is marked incomplete.
+      }
 
     const result = await mutation.mutateAsync({
       draft: {
         ...parsedDraft,
+        nutrition,
         recipeId: null,
         changeKind: 'manual_edit',
         userId: null,
@@ -153,6 +196,8 @@ export function ReviewScreen({
             ? 'AI-generated values are estimates, please review.'
             : undefined
         }
+        nutritionSources={nutritionSources}
+        isLoadingNutritionSources={nutritionSources.length === 0}
       />
 
       <div className="flex justify-center">

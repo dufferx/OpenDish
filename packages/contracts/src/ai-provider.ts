@@ -1,5 +1,10 @@
 import type { ConversationMessage } from './conversation.ts';
 import type { ModificationProposal } from './modification.ts';
+import type {
+  NutritionEstimateIngredient,
+  NutritionEstimateItem,
+  ProductLabelDraft,
+} from './nutrition.ts';
 import type { RecipeDraft, RecipeSnapshot } from './recipe.ts';
 
 /** BYOK credentials for the configured provider (R1/R4). */
@@ -67,4 +72,12 @@ export interface AiProvider {
     rawContent: string,
     credentials: AiCredentials,
   ): Promise<Result<RecipeDraft>>;
+  extractProductLabel(
+    imageDataUrl: string,
+    credentials: AiCredentials,
+  ): Promise<Result<ProductLabelDraft>>;
+  estimateNutrition(
+    ingredients: NutritionEstimateIngredient[],
+    credentials: AiCredentials,
+  ): Promise<Result<NutritionEstimateItem[]>>;
 }

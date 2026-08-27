@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { RecipeConversation } from '@/features/recipe-conversation';
 import { RecipeHistoryPanel } from '@/features/recipe-history';
 import { AddToShoppingListDialog } from '@/features/shopping-list';
+import { NutritionSummary } from './nutrition-summary.tsx';
 
 import { useRecipeDetail, type RecipeDetail } from './recipe-queries.ts';
 import { useRecipeActions } from './use-recipe-actions.ts';
@@ -228,6 +229,25 @@ export function RecipeDetailPage() {
     (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
   const hasRelationships =
     recipe.sourceRecipe !== null || recipe.variantRecipes.length > 0;
+  const nutritionCalculation = recipe.nutrition
+    ? {
+        values: {
+          calories: recipe.nutrition.calories,
+          proteinGrams: recipe.nutrition.proteinGrams,
+          carbohydratesGrams: recipe.nutrition.carbohydratesGrams,
+        },
+        status: recipe.nutrition.status,
+        unresolvedIngredients: [],
+        ingredientValues: {},
+      }
+    : {
+        values: { calories: 0, proteinGrams: 0, carbohydratesGrams: 0 },
+        status: 'missing' as const,
+        unresolvedIngredients: recipe.ingredients.map(
+          (ingredient) => ingredient.name,
+        ),
+        ingredientValues: {},
+      };
 
   async function handleDelete() {
     if (!recipe) return;
@@ -367,6 +387,8 @@ export function RecipeDetailPage() {
               </span>
             </div>
           </div>
+
+          <NutritionSummary calculation={nutritionCalculation} />
 
           <ServingsScaler
             key={`${recipe.id}:${recipe.headVersion}`}

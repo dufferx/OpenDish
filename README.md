@@ -103,6 +103,19 @@ repository never stores a project ref, service-role key, OAuth secret, or AI
 credential for the managed profile. Both profiles (local and managed) deploy
 the same frontend, migrations, and Edge Functions; only configuration differs.
 
+Phase 11.75 social-video import is currently experimental and adds one
+separately hosted service in
+[`services/video-import/README.md`](services/video-import/README.md).
+Deploy that service independently, then set these Supabase Edge Function
+secrets in the managed project:
+
+- `VIDEO_IMPORT_SERVICE_URL`
+- `VIDEO_IMPORT_SERVICE_SECRET`
+
+Set the same `VIDEO_IMPORT_SERVICE_SECRET` value in the hosted video-import
+service itself. Do not place either variable in `apps/web/.env.local` or any
+other client-readable `VITE_` environment.
+
 ## AI provider configuration (BYOK)
 
 AI features (recipe chat, reviewed modifications, conversational generation,
@@ -119,6 +132,13 @@ works with no AI provider configured.
 4. Any page that needs AI (chat, import, AI-create) shows a clear banner when
    AI is unconfigured or the saved credentials need attention, and never
    blocks non-AI recipe management.
+
+Experimental social video import for Instagram Reels, TikTok videos, and
+YouTube Shorts uses the hosted metadata service first, then the same BYOK
+extraction pipeline described above. Upstream platform access can be
+intermittent; pasted captions/text remain the reliable fallback. Audio
+transcription is not part of the current phase, and Instagram cookies are
+neither required nor stored.
 
 ## Self-hosting support level
 

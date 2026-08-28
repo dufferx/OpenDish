@@ -136,6 +136,20 @@ export function RecipeCard({
         </div>
       </CardHeader>
       <CardContent className="pb-2">
+        {recipe.nutrition ? (
+          <p className="mb-2 text-sm font-medium" aria-label="Recipe macros">
+            {Math.round(recipe.nutrition.calories)} kcal ·{' '}
+            {recipe.nutrition.proteinGrams.toFixed(1)}g protein ·{' '}
+            {recipe.nutrition.carbohydratesGrams.toFixed(1)}g carbs
+          </p>
+        ) : (
+          <p
+            className="mb-2 text-sm text-muted-foreground"
+            aria-label="Recipe macros"
+          >
+            Macros not calculated yet
+          </p>
+        )}
         {snippet ? (
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {snippet}

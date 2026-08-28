@@ -2,8 +2,10 @@ import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   makeQuantity,
+  nutritionRecordSchema,
   recipeDraftSchema,
   recipeSnapshotSchema,
+  type NutritionRecord,
   type RecipeSnapshot,
 } from '@opendish/contracts';
 
@@ -125,6 +127,7 @@ export interface StoredRecipeRow {
   isFavorite: boolean;
   headVersion: number;
   origin: string;
+  nutrition?: NutritionRecord | null;
 }
 
 export interface StoredIngredientRow {
@@ -133,6 +136,8 @@ export interface StoredIngredientRow {
   quantityNum: number | null;
   quantityDen: number | null;
   unit: string | null;
+  nutritionFoodId?: string | null;
+  userProductId?: string | null;
 }
 
 export interface StoredStepRow {
@@ -198,13 +203,21 @@ export interface RecipeStore {
 function toIngredientRows(
   ingredients: SaveRecipeInput['ingredients'],
 ): StoredIngredientRow[] {
-  return ingredients.map((ingredient, position) => ({
-    position,
-    name: ingredient.name,
-    quantityNum: ingredient.quantity?.num ?? null,
-    quantityDen: ingredient.quantity?.den ?? null,
-    unit: ingredient.unit,
-  }));
+  return ingredients.map((ingredient, position) => {
+    const source = ingredient.nutritionSource;
+    return {
+      position,
+      name: ingredient.name,
+      quantityNum: ingredient.quantity?.num ?? null,
+      quantityDen: ingredient.quantity?.den ?? null,
+      unit: ingredient.unit,
+      ...(source?.sourceType === 'generic_food'
+        ? { nutritionFoodId: source.sourceId }
+        : source?.sourceType === 'user_product'
+          ? { userProductId: source.sourceId }
+          : {}),
+    };
+  });
 }
 
 function toStepRows(steps: SaveRecipeInput['steps']): StoredStepRow[] {
@@ -233,10 +246,17 @@ function buildSnapshot(state: StoredRecipeState): RecipeSnapshot {
           ? null
           : makeQuantity(row.quantityNum, row.quantityDen ?? 1),
       unit: row.unit,
+      nutritionSource:
+        row.nutritionFoodId != null
+          ? { sourceType: 'generic_food', sourceId: row.nutritionFoodId }
+          : row.userProductId != null
+            ? { sourceType: 'user_product', sourceId: row.userProductId }
+            : null,
     })),
     steps: byPosition(state.steps).map((row) => ({ text: row.text })),
     tags: state.tags,
     imagePath: recipe.imagePath,
+    nutrition: recipe.nutrition,
   });
 }
 
@@ -374,6 +394,10 @@ interface RecipeDbRow {
   is_favorite: boolean;
   head_version: number;
   origin: string;
+  nutrition_calories: number | null;
+  nutrition_protein_grams: number | null;
+  nutrition_carbohydrates_grams: number | null;
+  nutrition_status: 'confirmed' | 'estimated' | 'missing' | null;
 }
 
 interface IngredientDbRow {
@@ -382,6 +406,8 @@ interface IngredientDbRow {
   quantity_num: number | null;
   quantity_den: number | null;
   unit: string | null;
+  nutrition_food_id: string | null;
+  user_product_id: string | null;
 }
 
 interface StepDbRow {
@@ -396,6 +422,27 @@ interface TagDbRow {
 
 function checkError(error: { message: string } | null): void {
   if (error) throw new Error(`recipe store: ${error.message}`);
+}
+
+function toNutritionRecord(row: RecipeDbRow): NutritionRecord | null {
+  if (
+    row.nutrition_calories === null ||
+    row.nutrition_protein_grams === null ||
+    row.nutrition_carbohydrates_grams === null ||
+    row.nutrition_status === null
+  ) {
+    return null;
+  }
+  return nutritionRecordSchema.parse({
+    calories: Number(row.nutrition_calories),
+    proteinGrams: Number(row.nutrition_protein_grams),
+    carbohydratesGrams: Number(row.nutrition_carbohydrates_grams),
+    sourceType: 'manual',
+    sourceId: null,
+    basis: 'serving',
+    preparation: 'not_applicable',
+    status: row.nutrition_status,
+  });
 }
 
 /** Adapt a Supabase client (service role or user-scoped) to `RecipeStore`. */
@@ -416,7 +463,9 @@ export function createSupabaseRecipeStore(
       const [ingredientsRes, stepsRes, linksRes] = await Promise.all([
         supabase
           .from('recipe_ingredients')
-          .select('position, name, quantity_num, quantity_den, unit')
+          .select(
+            'position, name, quantity_num, quantity_den, unit, nutrition_food_id, user_product_id',
+          )
           .eq('recipe_id', recipeId)
           .order('position'),
         supabase
@@ -459,6 +508,7 @@ export function createSupabaseRecipeStore(
           isFavorite: row.is_favorite,
           headVersion: Number(row.head_version),
           origin: row.origin,
+          nutrition: toNutritionRecord(row),
         },
         ingredients: ((ingredientsRes.data ?? []) as IngredientDbRow[]).map(
           (r) => ({
@@ -467,6 +517,8 @@ export function createSupabaseRecipeStore(
             quantityNum: r.quantity_num,
             quantityDen: r.quantity_den,
             unit: r.unit,
+            nutritionFoodId: r.nutrition_food_id,
+            userProductId: r.user_product_id,
           }),
         ),
         steps: ((stepsRes.data ?? []) as StepDbRow[]).map((r) => ({
@@ -503,6 +555,14 @@ export function createSupabaseRecipeStore(
           source_url: fields.sourceUrl,
           origin: fields.origin,
           is_favorite: fields.isFavorite,
+          nutrition_calories: fields.nutrition?.calories ?? null,
+          nutrition_protein_grams: fields.nutrition?.proteinGrams ?? null,
+          nutrition_carbohydrates_grams:
+            fields.nutrition?.carbohydratesGrams ?? null,
+          nutrition_status: fields.nutrition?.status ?? null,
+          nutrition_calculated_at: fields.nutrition
+            ? new Date().toISOString()
+            : null,
         })
         .select('id')
         .single();
@@ -525,6 +585,14 @@ export function createSupabaseRecipeStore(
           source_url: fields.sourceUrl,
           origin: fields.origin,
           is_favorite: fields.isFavorite,
+          nutrition_calories: fields.nutrition?.calories ?? null,
+          nutrition_protein_grams: fields.nutrition?.proteinGrams ?? null,
+          nutrition_carbohydrates_grams:
+            fields.nutrition?.carbohydratesGrams ?? null,
+          nutrition_status: fields.nutrition?.status ?? null,
+          nutrition_calculated_at: fields.nutrition
+            ? new Date().toISOString()
+            : null,
           head_version: nextHeadVersion,
         })
         .eq('id', recipeId)
@@ -551,6 +619,8 @@ export function createSupabaseRecipeStore(
           quantity_num: r.quantityNum,
           quantity_den: r.quantityDen,
           unit: r.unit,
+          nutrition_food_id: r.nutritionFoodId,
+          user_product_id: r.userProductId,
         })),
       );
       checkError(error);

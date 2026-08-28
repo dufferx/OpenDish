@@ -97,8 +97,7 @@ export function AppLayout() {
               height={32}
               className="size-8 shrink-0 rounded-md bg-muted object-cover"
             />
-            <span className="hidden sm:inline">OpenDish</span>
-            <span className="sr-only sm:hidden">OpenDish</span>
+            <span>OpenDish</span>
           </Link>
           <div className="hidden md:block">
             <PrimaryNav variant="top" />

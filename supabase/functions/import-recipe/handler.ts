@@ -8,6 +8,7 @@ import {
   type AiCredentials,
   type AiError,
   type AiProvider,
+  type RecipeImportExtractionMethod,
   type RecipeDraft,
 } from '../../../packages/contracts/src/index.ts';
 import {
@@ -70,6 +71,23 @@ export interface ImportRecipeOptions {
   /** Fetches and SSRF-screens a public https URL, returning HTML or a safe error. */
   safeFetch: (url: string) => Promise<SafeFetchResult | SafeFetchFailure>;
   aiConfigReader: AiConfigReader;
+  videoImport: VideoImportClient;
+}
+
+export interface VideoImportSuccess {
+  ok: true;
+  title: string;
+  description: string;
+}
+
+export interface VideoImportFailure {
+  ok: false;
+  errorCode: ImportErrorCode;
+  message: string;
+}
+
+export interface VideoImportClient {
+  fetchMetadata(url: string): Promise<VideoImportSuccess | VideoImportFailure>;
 }
 
 const SAFE_FETCH_CODE_MAP: Record<SafeFetchErrorCode, ImportErrorCode> = {
@@ -111,42 +129,101 @@ export function createSafeFetch(): (
   };
 }
 
-// Social platforms whose pages require a login/JS session to render, so a
-// server-side fetch only ever sees an empty app shell (no caption, no
-// og:description). Import from these is out of scope (see spec); detect them
-// up front so the failure is a clear, actionable message instead of the
-// generic "schema mismatch" produced by feeding the AI an empty page.
-const UNSUPPORTED_SOCIAL_HOSTS = new Set([
+type SupportedVideoPlatform = 'instagram_reel' | 'tiktok_video' | 'youtube_short';
+
+const INSTAGRAM_HOSTS = new Set([
   'instagram.com',
   'www.instagram.com',
+  'm.instagram.com',
+]);
+
+const TIKTOK_HOSTS = new Set([
   'tiktok.com',
   'www.tiktok.com',
+  'm.tiktok.com',
+  'vm.tiktok.com',
+  'vt.tiktok.com',
+]);
+
+const YOUTUBE_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+]);
+
+const UNSUPPORTED_SOCIAL_HOSTS = new Set([
   'facebook.com',
   'www.facebook.com',
   'fb.watch',
 ]);
 
-const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com']);
+function detectSupportedVideoPlatform(rawUrl: string): SupportedVideoPlatform | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
 
-function isUnsupportedSocialUrl(rawUrl: string): boolean {
+  if (url.protocol !== 'https:') {
+    return null;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname;
+  const segments = pathname.split('/').filter(Boolean);
+
+  if (INSTAGRAM_HOSTS.has(hostname) && segments[0] === 'reel' && segments.length >= 2) {
+    return 'instagram_reel';
+  }
+
+  if (TIKTOK_HOSTS.has(hostname)) {
+    if (hostname === 'vm.tiktok.com' || hostname === 'vt.tiktok.com') {
+      return pathname !== '/' ? 'tiktok_video' : null;
+    }
+    if (
+      /^\/@[^/]+\/video\/[^/]+\/?$/.test(pathname) ||
+      /^\/(?:t|v)\/[^/]+\/?$/.test(pathname)
+    ) {
+      return 'tiktok_video';
+    }
+  }
+
+  if (YOUTUBE_HOSTS.has(hostname) && segments[0] === 'shorts' && segments.length >= 2) {
+    return 'youtube_short';
+  }
+
+  return null;
+}
+
+function isKnownUnsupportedSocialUrl(rawUrl: string): boolean {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
     return false;
   }
+
   const hostname = url.hostname.toLowerCase();
   if (UNSUPPORTED_SOCIAL_HOSTS.has(hostname)) {
     return true;
   }
-  return YOUTUBE_HOSTS.has(hostname) && url.pathname.startsWith('/shorts/');
+
+  return (
+    INSTAGRAM_HOSTS.has(hostname) ||
+    TIKTOK_HOSTS.has(hostname) ||
+    YOUTUBE_HOSTS.has(hostname)
+  );
 }
 
 const UNSUPPORTED_SOCIAL_MESSAGE =
-  'Instagram, TikTok, Facebook, and YouTube Shorts links can’t be ' +
-  'imported directly — these sites don’t expose the recipe as ' +
-  'fetchable text. Open the post, copy the caption, and use "Paste text" ' +
-  'instead.';
+  'Only public Instagram Reels, TikTok videos, and YouTube Shorts links ' +
+  'are supported for direct video import. For anything else, copy the ' +
+  'caption or description and use "Paste text" instead.';
+
+const VIDEO_METADATA_NO_RECIPE_MESSAGE =
+  'This video did not expose a usable caption or description for import. ' +
+  'Copy the caption or description and use "Paste text" instead.';
 
 /** Strips scripts, styles, and tags, leaving sanitized page text for the AI. */
 export function sanitizeHtmlForAi(html: string): string {
@@ -204,9 +281,19 @@ async function runAiExtraction(
   provider: AiProvider,
   config: AiCredentials,
   rawContent: string,
+  extractionMethod: RecipeImportExtractionMethod = 'ai',
+  invalidOutputErrorCode: ImportErrorCode = 'invalid_ai_output',
+  invalidOutputMessage?: string,
 ): Promise<Response> {
   const aiResult = await provider.extractRecipe(rawContent, config);
   if (!aiResult.ok) {
+    if (aiResult.error.code === 'invalid_ai_output') {
+      return errorResponse(
+        422,
+        invalidOutputErrorCode,
+        invalidOutputMessage ?? aiResult.error.message,
+      );
+    }
     return errorResponse(
       statusForAiError(aiResult.error.code),
       mapAiError(aiResult.error.code),
@@ -215,9 +302,30 @@ async function runAiExtraction(
   }
   const validated = validateDraft(aiResult.value);
   if (!validated.ok) {
-    return errorResponse(422, 'invalid_ai_output', validated.message);
+    return errorResponse(
+      422,
+      invalidOutputErrorCode,
+      invalidOutputMessage ?? validated.message,
+    );
   }
-  return jsonResponse({ draft: validated.draft, extractionMethod: 'ai' });
+  return jsonResponse({ draft: validated.draft, extractionMethod });
+}
+
+function buildVideoMetadataContent(title: string, description: string): string {
+  const normalizedTitle = title.trim();
+  const normalizedDescription = description.trim();
+  // A title alone is not recipe content. Requiring a non-empty caption or
+  // description prevents the AI fallback from hallucinating a recipe from a
+  // video title when metadata-only extraction found no usable source text.
+  if (!normalizedDescription) {
+    return '';
+  }
+  return [
+    normalizedTitle ? `Video title: ${normalizedTitle}` : null,
+    `Caption or description:\n${normalizedDescription}`,
+  ]
+    .filter((value): value is string => value !== null)
+    .join('\n\n');
 }
 
 /**
@@ -230,7 +338,49 @@ export function createImportRecipeHandler(options: ImportRecipeOptions) {
     verifyAuth: options.verifyAuth,
     handler: async (body, ctx) => {
       if (body.mode === 'url') {
-        if (isUnsupportedSocialUrl(body.url)) {
+        const supportedVideoPlatform = detectSupportedVideoPlatform(body.url);
+        if (supportedVideoPlatform) {
+          const videoImportResult = await options.videoImport.fetchMetadata(body.url);
+          if (!videoImportResult.ok) {
+            return errorResponse(
+              422,
+              videoImportResult.errorCode,
+              videoImportResult.message,
+            );
+          }
+
+          const rawVideoContent = buildVideoMetadataContent(
+            videoImportResult.title,
+            videoImportResult.description,
+          );
+          if (rawVideoContent.length === 0) {
+            return errorResponse(
+              422,
+              'no_recipe_found',
+              VIDEO_METADATA_NO_RECIPE_MESSAGE,
+            );
+          }
+
+          const config = await options.aiConfigReader.getConfig(ctx.userId);
+          if (!config.configured) {
+            return errorResponse(
+              422,
+              'ai_not_configured',
+              'Video caption import requires AI to be configured. Configure AI in settings or paste the recipe manually.',
+            );
+          }
+
+          return runAiExtraction(
+            options.provider,
+            config.credentials,
+            rawVideoContent,
+            'video_metadata',
+            'no_recipe_found',
+            VIDEO_METADATA_NO_RECIPE_MESSAGE,
+          );
+        }
+
+        if (isKnownUnsupportedSocialUrl(body.url)) {
           return errorResponse(422, 'unsupported_url', UNSUPPORTED_SOCIAL_MESSAGE);
         }
 

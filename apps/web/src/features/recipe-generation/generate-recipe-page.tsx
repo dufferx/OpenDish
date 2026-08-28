@@ -1,4 +1,4 @@
-import { BotIcon, SparklesIcon, UserIcon, XIcon } from 'lucide-react';
+import { SparklesIcon, UserIcon, XIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -12,6 +12,7 @@ import {
 } from '@/features/ai-config';
 import { ReviewScreen } from '@/features/recipe-import/review-screen.tsx';
 import type { RecipeDraft } from '@opendish/contracts';
+import mascotImage from '@/assets/mascot.jpg';
 
 import {
   generateRecipeTurn,
@@ -162,7 +163,10 @@ export function GenerateRecipePage() {
   }
 
   return (
-    <section className="flex flex-col gap-6" aria-labelledby="generate-recipe-title">
+    <section
+      className="flex flex-col gap-6"
+      aria-labelledby="generate-recipe-title"
+    >
       <h1
         id="generate-recipe-title"
         className="flex items-center gap-2 text-2xl font-semibold tracking-tight"
@@ -173,8 +177,8 @@ export function GenerateRecipePage() {
       <Card>
         <CardHeader>
           <p className="text-sm text-muted-foreground">
-            Describe what you want to cook. The AI may ask a clarifying
-            question before producing a recipe draft.
+            Describe what you want to cook. The AI may ask a clarifying question
+            before producing a recipe draft.
           </p>
         </CardHeader>
         <CardContent className="grid gap-5">
@@ -205,8 +209,14 @@ export function GenerateRecipePage() {
                   <div className="mb-1 flex items-center gap-2 text-xs font-medium">
                     {item.role === 'assistant' ? (
                       <>
-                        <BotIcon className="size-4" aria-hidden />
-                        <span>AI response</span>
+                        <img
+                          src={mascotImage}
+                          alt=""
+                          width={24}
+                          height={24}
+                          className="size-6 rounded-md object-cover"
+                        />
+                        <span>Dishy</span>
                       </>
                     ) : (
                       <>

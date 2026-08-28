@@ -1,8 +1,8 @@
 import {
   BookOpenIcon,
   ImportIcon,
-  SettingsIcon,
   ShoppingCartIcon,
+  PackageIcon,
   SparklesIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -15,11 +15,11 @@ export interface NavItem {
   end?: boolean;
 }
 
-/** The five primary destinations required by FR-034. */
+/** Primary destinations for recipes, nutrition products, and app settings. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Recipes', icon: BookOpenIcon, end: true },
   { to: '/import', label: 'Import', icon: ImportIcon },
   { to: '/generate', label: 'AI Create', icon: SparklesIcon },
   { to: '/shopping-list', label: 'Shopping', icon: ShoppingCartIcon },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon },
+  { to: '/products', label: 'Products', icon: PackageIcon },
 ];

@@ -4,6 +4,11 @@ import type {
   GenerateRecipeOutcome,
   Result,
 } from '../ai-provider.ts';
+import type {
+  NutritionEstimateIngredient,
+  NutritionEstimateItem,
+  ProductLabelDraft,
+} from '../nutrition.ts';
 import { ok } from '../ai-provider.ts';
 import type { ConversationMessage } from '../conversation.ts';
 import type { ModificationProposal } from '../modification.ts';
@@ -20,6 +25,8 @@ export interface FakeAiProviderResponses {
   answerRecipeQuestion?: Result<string>;
   proposeRecipeModification?: Result<ModificationProposal>;
   extractRecipe?: Result<RecipeDraft>;
+  extractProductLabel?: Result<ProductLabelDraft>;
+  estimateNutrition?: Result<NutritionEstimateItem[]>;
 }
 
 export type FakeAiProviderCall =
@@ -45,6 +52,16 @@ export type FakeAiProviderCall =
   | {
       method: 'extractRecipe';
       rawContent: string;
+      credentials: AiCredentials;
+    }
+  | {
+      method: 'extractProductLabel';
+      imageDataUrl: string;
+      credentials: AiCredentials;
+    }
+  | {
+      method: 'estimateNutrition';
+      ingredients: NutritionEstimateIngredient[];
       credentials: AiCredentials;
     };
 
@@ -118,6 +135,48 @@ export class FakeAiProvider implements AiProvider {
     this.calls.push({ method: 'extractRecipe', rawContent, credentials });
     return Promise.resolve(
       this.responses.extractRecipe ?? ok(validRecipeDraft),
+    );
+  }
+
+  extractProductLabel(
+    imageDataUrl: string,
+    credentials: AiCredentials,
+  ): Promise<Result<ProductLabelDraft>> {
+    this.calls.push({
+      method: 'extractProductLabel',
+      imageDataUrl,
+      credentials,
+    });
+    return Promise.resolve(
+      this.responses.extractProductLabel ??
+        ok({
+          name: 'Fake product',
+          brand: null,
+          servingSizeText: '1 serving',
+          servingMassG: 100,
+          servingVolumeMl: null,
+          calories: 100,
+          proteinGrams: 10,
+          carbohydratesGrams: 5,
+        }),
+    );
+  }
+
+  estimateNutrition(
+    ingredients: NutritionEstimateIngredient[],
+    credentials: AiCredentials,
+  ): Promise<Result<NutritionEstimateItem[]>> {
+    this.calls.push({ method: 'estimateNutrition', ingredients, credentials });
+    return Promise.resolve(
+      this.responses.estimateNutrition ??
+        ok(
+          ingredients.map((ingredient) => ({
+            name: ingredient.name,
+            calories: 0,
+            proteinGrams: 0,
+            carbohydratesGrams: 0,
+          })),
+        ),
     );
   }
 }

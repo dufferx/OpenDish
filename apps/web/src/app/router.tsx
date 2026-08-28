@@ -9,6 +9,7 @@ import { AuthGuard } from '@/features/auth/auth-guard';
 import { LoginPage } from '@/features/auth/login-page';
 import { RecipeEditorPage } from '@/features/recipe-editor';
 import { RecipeDetailPage, RecipeListPage } from '@/features/recipes';
+import { ProductsPage } from '@/features/products';
 
 /**
  * Route map. Placeholder pages are replaced by feature tasks
@@ -39,6 +40,7 @@ export function AppRoutes() {
         <Route path="import" element={<ImportRecipePage />} />
         <Route path="generate" element={<GenerateRecipePage />} />
         <Route path="shopping-list" element={<ShoppingListPage />} />
+        <Route path="products" element={<ProductsPage />} />
         <Route path="settings" element={<AiSettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

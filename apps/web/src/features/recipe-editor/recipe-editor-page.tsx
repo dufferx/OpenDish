@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { calculateNutrition, type NutritionRecord } from '@opendish/contracts';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Loading, ErrorState } from '@/app/states';
@@ -16,6 +17,11 @@ import {
 } from './recipe-editor-form.tsx';
 import { useRecipeMutation } from './use-recipe-mutation.ts';
 import type { RecipeFormValues } from './form-schema.ts';
+import { useNutritionSources } from '@/features/products/nutrition-source-queries.ts';
+import {
+  estimateItemsToRecord,
+  estimateMissingNutrition,
+} from '@/features/recipes/nutrition-estimate-api.ts';
 
 function storedStateToFormValues(state: StoredRecipeState): RecipeFormValues {
   return {
@@ -36,6 +42,12 @@ function storedStateToFormValues(state: StoredRecipeState): RecipeFormValues {
               den: ingredient.quantityDen ?? 1,
             }),
       unit: ingredient.unit ?? '',
+      nutritionSource:
+        ingredient.nutritionFoodId != null
+          ? { sourceType: 'generic_food', sourceId: ingredient.nutritionFoodId }
+          : ingredient.userProductId != null
+            ? { sourceType: 'user_product', sourceId: ingredient.userProductId }
+            : null,
     })),
     steps: state.steps.map((step) => ({ text: step.text })),
     tags: state.tags,
@@ -44,7 +56,10 @@ function storedStateToFormValues(state: StoredRecipeState): RecipeFormValues {
 
 function useRecipeQuery(recipeId: string | undefined) {
   return useQuery({
-    queryKey: ['recipe', recipeId],
+    // Keep the editor's StoredRecipeState cache separate from the detail
+    // page's RecipeDetail cache; both routes use the same recipe id but have
+    // different object shapes.
+    queryKey: ['recipe-state', recipeId],
     queryFn: async () => {
       if (!recipeId) return null;
       const store = createSupabaseRecipeStore(supabase);
@@ -65,6 +80,8 @@ export function RecipeEditorPage({ mode }: RecipeEditorPageProps) {
   const recipeId = mode === 'edit' ? id : undefined;
   const { data: state, isLoading, error, refetch } = useRecipeQuery(recipeId);
   const mutation = useRecipeMutation();
+  const { data: nutritionSources = [], isLoading: isLoadingNutritionSources } =
+    useNutritionSources();
 
   const initialValues = useMemo<Partial<RecipeFormValues> | undefined>(() => {
     if (mode === 'create') return undefined;
@@ -95,10 +112,75 @@ export function RecipeEditorPage({ mode }: RecipeEditorPageProps) {
   const handleSubmit: RecipeEditorFormProps['onSubmit'] = async (
     draft,
     imageFile,
+    calculatedNutrition,
   ) => {
+    const sourceByKey = new Map(
+      nutritionSources.map((source) => [
+        `${source.sourceType}:${source.id}`,
+        source,
+      ]),
+    );
+    const calculation = calculateNutrition(
+      draft.ingredients.map((ingredient) => ({
+        name: ingredient.name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        source: ingredient.nutritionSource
+          ? (sourceByKey.get(
+              `${ingredient.nutritionSource.sourceType}:${ingredient.nutritionSource.sourceId}`,
+            ) ?? null)
+          : null,
+      })),
+      draft.servings,
+    );
+    let nutrition: NutritionRecord = calculatedNutrition ?? {
+      ...calculation.values,
+      sourceType: calculation.status === 'estimated' ? 'ai_estimate' : 'manual',
+      sourceId: null,
+      basis: 'serving',
+      preparation: 'not_applicable',
+      status: calculation.status,
+    };
+    if (!calculatedNutrition && calculation.unresolvedIngredients.length > 0) {
+      try {
+        const items = await estimateMissingNutrition(
+          draft.ingredients
+            .filter((ingredient) =>
+              calculation.unresolvedIngredients.includes(ingredient.name),
+            )
+            .map((ingredient) => ({
+              name: ingredient.name,
+              quantity: ingredient.quantity
+                ? ingredient.quantity.num / ingredient.quantity.den
+                : null,
+              unit: ingredient.unit,
+            })),
+        );
+        const estimate = estimateItemsToRecord(items, draft.servings);
+        const localTotal = calculation.values;
+        nutrition = {
+          ...localTotal,
+          calories: localTotal.calories + estimate.calories,
+          proteinGrams: localTotal.proteinGrams + estimate.proteinGrams,
+          carbohydratesGrams:
+            localTotal.carbohydratesGrams + estimate.carbohydratesGrams,
+          sourceType: 'ai_estimate',
+          sourceId: null,
+          basis: 'serving',
+          preparation: 'not_applicable',
+          status:
+            items.length === calculation.unresolvedIngredients.length
+              ? 'estimated'
+              : 'missing',
+        };
+      } catch {
+        // Keep the deterministic partial result and its incomplete status.
+      }
+    }
     const result = await mutation.mutateAsync({
       draft: {
         ...draft,
+        nutrition,
         recipeId: mode === 'edit' && id ? id : null,
         changeKind: 'manual_edit',
         userId: null,
@@ -121,6 +203,9 @@ export function RecipeEditorPage({ mode }: RecipeEditorPageProps) {
         onSubmit={handleSubmit}
         isSubmitting={mutation.isPending}
         submitLabel={mode === 'create' ? 'Create recipe' : 'Save changes'}
+        nutritionSources={nutritionSources}
+        isLoadingNutritionSources={isLoadingNutritionSources}
+        enableDraftAssistant
       />
     </section>
   );

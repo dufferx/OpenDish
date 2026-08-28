@@ -7,16 +7,21 @@ import {
   Trash2Icon,
   XIcon,
 } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   useFieldArray,
   useForm,
   Controller,
   type FieldError,
+  useWatch,
 } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
-import type { RecipeDraft } from '@opendish/contracts';
+import {
+  calculateNutrition,
+  type NutritionRecord,
+  type RecipeDraft,
+} from '@opendish/contracts';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +31,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { getRecipeImageUrl, validateRecipeImage } from '@/lib/recipe-images.ts';
+import type { NutritionSourceOption } from '@/features/products/nutrition-source-queries.ts';
+import { parseQuantityInput } from '@/domain/rational.ts';
+import { NutritionSummary } from '@/features/recipes/nutrition-summary.tsx';
+import { RecipeDraftAssistant } from '@/features/recipe-conversation';
+import {
+  estimateItemsToRecord,
+  estimateMissingNutrition,
+} from '@/features/recipes/nutrition-estimate-api.ts';
 
 import {
   parseRecipeFormValues,
@@ -38,7 +51,11 @@ export interface RecipeEditorFormProps {
   initialValues?: Partial<RecipeFormValues>;
   existingImagePath?: string | null;
   recipeId?: string | null;
-  onSubmit: (draft: RecipeDraft, imageFile: File | null) => Promise<void>;
+  onSubmit: (
+    draft: RecipeDraft,
+    imageFile: File | null,
+    calculatedNutrition?: NutritionRecord,
+  ) => Promise<void>;
   isSubmitting: boolean;
   submitLabel?: string;
   /** Optional destination for the Cancel button (defaults to recipe detail or home). */
@@ -47,6 +64,10 @@ export interface RecipeEditorFormProps {
   onCancel?: () => void;
   /** Optional note rendered near timing fields to flag AI-generated estimates. */
   aiEstimateNote?: ReactNode;
+  nutritionSources?: NutritionSourceOption[];
+  isLoadingNutritionSources?: boolean;
+  /** Enables the local, review-before-apply AI assistant for this draft. */
+  enableDraftAssistant?: boolean;
 }
 
 const defaultValues: RecipeFormValues = {
@@ -57,7 +78,9 @@ const defaultValues: RecipeFormValues = {
   cookTimeMinutes: null,
   sourceName: null,
   sourceUrl: null,
-  ingredients: [{ name: '', quantityText: '', unit: '' }],
+  ingredients: [
+    { name: '', quantityText: '', unit: '', nutritionSource: null },
+  ],
   steps: [{ text: '' }],
   tags: [],
 };
@@ -92,12 +115,21 @@ export function RecipeEditorForm({
   cancelTo,
   onCancel,
   aiEstimateNote,
+  nutritionSources = [],
+  isLoadingNutritionSources = false,
+  enableDraftAssistant = false,
 }: RecipeEditorFormProps) {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState<string | null>(null);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [aiEstimate, setAiEstimate] = useState<{
+    key: string;
+    record: NutritionRecord;
+  } | null>(null);
+  const [isEstimating, setIsEstimating] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<RecipeFormValues>({
@@ -124,6 +156,105 @@ export function RecipeEditorForm({
     control,
     name: 'ingredients',
   });
+  const watchedValues = useWatch({ control });
+  const parsedWatchedDraft = useMemo(
+    () => parseRecipeFormValues(watchedValues as RecipeFormValues),
+    [watchedValues],
+  );
+  const nutritionCalculation = useMemo(() => {
+    const sourceByKey = new Map(
+      nutritionSources.map((source) => [
+        `${source.sourceType}:${source.id}`,
+        source,
+      ]),
+    );
+    return calculateNutrition(
+      (watchedValues.ingredients ?? []).map((ingredient) => ({
+        name: ingredient.name || 'Unnamed ingredient',
+        quantity: parseQuantityInput((ingredient.quantityText ?? '').trim()),
+        unit: ingredient.unit || null,
+        source: ingredient.nutritionSource
+          ? (sourceByKey.get(
+              `${ingredient.nutritionSource.sourceType}:${ingredient.nutritionSource.sourceId}`,
+            ) ?? null)
+          : null,
+      })),
+      Number(watchedValues.servings) || 1,
+    );
+  }, [nutritionSources, watchedValues]);
+  const nutritionInputKey = JSON.stringify({
+    servings: watchedValues.servings,
+    ingredients: watchedValues.ingredients,
+  });
+  const displayedNutrition =
+    aiEstimate?.key === nutritionInputKey
+      ? {
+          values: {
+            calories: aiEstimate.record.calories,
+            proteinGrams: aiEstimate.record.proteinGrams,
+            carbohydratesGrams: aiEstimate.record.carbohydratesGrams,
+          },
+          status: aiEstimate.record.status,
+          unresolvedIngredients:
+            aiEstimate.record.status === 'missing'
+              ? nutritionCalculation.unresolvedIngredients
+              : [],
+          ingredientValues: {},
+        }
+      : nutritionCalculation;
+
+  async function calculateAiEstimate() {
+    if (nutritionCalculation.unresolvedIngredients.length === 0) return;
+    setIsEstimating(true);
+    setEstimateError(null);
+    try {
+      const items = await estimateMissingNutrition(
+        (watchedValues.ingredients ?? [])
+          .filter((ingredient) =>
+            nutritionCalculation.unresolvedIngredients.includes(
+              ingredient.name || 'Unnamed ingredient',
+            ),
+          )
+          .map((ingredient) => ({
+            name: ingredient.name || 'Unnamed ingredient',
+            quantity: parseQuantityInput((ingredient.quantityText ?? '').trim())
+              ? parseQuantityInput((ingredient.quantityText ?? '').trim())!
+                  .num /
+                parseQuantityInput((ingredient.quantityText ?? '').trim())!.den
+              : null,
+            unit: ingredient.unit || null,
+          })),
+      );
+      const estimate = estimateItemsToRecord(
+        items,
+        Number(watchedValues.servings) || 1,
+      );
+      setAiEstimate({
+        key: nutritionInputKey,
+        record: {
+          ...estimate,
+          calories: nutritionCalculation.values.calories + estimate.calories,
+          proteinGrams:
+            nutritionCalculation.values.proteinGrams + estimate.proteinGrams,
+          carbohydratesGrams:
+            nutritionCalculation.values.carbohydratesGrams +
+            estimate.carbohydratesGrams,
+          status:
+            items.length === nutritionCalculation.unresolvedIngredients.length
+              ? 'estimated'
+              : 'missing',
+        },
+      });
+    } catch (error) {
+      setEstimateError(
+        error instanceof Error
+          ? error.message
+          : 'Could not calculate an AI estimate.',
+      );
+    } finally {
+      setIsEstimating(false);
+    }
+  }
 
   const stepsArray = useFieldArray({
     control,
@@ -169,10 +300,47 @@ export function RecipeEditorForm({
       return;
     }
 
-    await onSubmit(draft, selectedImageFile);
+    await onSubmit(
+      draft,
+      selectedImageFile,
+      aiEstimate?.key === nutritionInputKey
+        ? aiEstimate.record
+        : nutritionCalculation.unresolvedIngredients.length === 0
+          ? {
+              ...nutritionCalculation.values,
+              sourceType: 'manual',
+              sourceId: null,
+              basis: 'serving',
+              preparation: 'not_applicable',
+              status: nutritionCalculation.status,
+            }
+          : undefined,
+    );
   }
 
   const displayedImageUrl = imagePreviewUrl ?? existingImageUrl;
+
+  function applyAssistantDraft(nextDraft: RecipeDraft) {
+    form.reset({
+      title: nextDraft.title,
+      description: nextDraft.description,
+      servings: nextDraft.servings,
+      prepTimeMinutes: nextDraft.prepTimeMinutes,
+      cookTimeMinutes: nextDraft.cookTimeMinutes,
+      sourceName: nextDraft.sourceName,
+      sourceUrl: nextDraft.sourceUrl,
+      ingredients: nextDraft.ingredients.map((ingredient) => ({
+        name: ingredient.name,
+        quantityText: ingredient.quantity
+          ? `${ingredient.quantity.num}/${ingredient.quantity.den}`
+          : '',
+        unit: ingredient.unit ?? '',
+        nutritionSource: ingredient.nutritionSource ?? null,
+      })),
+      steps: nextDraft.steps.map((step) => ({ text: step.text })),
+      tags: nextDraft.tags,
+    });
+  }
 
   return (
     <form
@@ -180,6 +348,21 @@ export function RecipeEditorForm({
       className="flex flex-col gap-6"
       aria-label="Recipe editor"
     >
+      {enableDraftAssistant ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Need to adjust the recipe? Ask AI and review the changes first.
+          </p>
+          <RecipeDraftAssistant
+            draft={
+              Object.keys(parsedWatchedDraft.fieldErrors).length === 0
+                ? parsedWatchedDraft.draft
+                : null
+            }
+            onApply={applyAssistantDraft}
+          />
+        </div>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Basics</CardTitle>
@@ -277,6 +460,44 @@ export function RecipeEditorForm({
                 aria-label={`Ingredient ${index + 1} unit`}
                 {...register(`ingredients.${index}.unit`)}
               />
+              <Controller
+                control={control}
+                name={`ingredients.${index}.nutritionSource`}
+                render={({ field: sourceField }) => (
+                  <select
+                    aria-label={`Ingredient ${index + 1} nutrition source`}
+                    className="col-span-3 h-10 rounded-md border border-input bg-background px-3 text-sm sm:col-span-3"
+                    value={
+                      sourceField.value
+                        ? `${sourceField.value.sourceType}:${sourceField.value.sourceId}`
+                        : ''
+                    }
+                    onChange={(event) => {
+                      const [sourceType, sourceId] =
+                        event.target.value.split(':');
+                      sourceField.onChange(
+                        sourceType && sourceId
+                          ? { sourceType, sourceId }
+                          : null,
+                      );
+                    }}
+                  >
+                    <option value="">
+                      {isLoadingNutritionSources
+                        ? 'Loading nutrition sources…'
+                        : 'Nutrition source (optional)'}
+                    </option>
+                    {nutritionSources.map((source) => (
+                      <option
+                        key={`${source.sourceType}:${source.id}`}
+                        value={`${source.sourceType}:${source.id}`}
+                      >
+                        {source.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -303,7 +524,12 @@ export function RecipeEditorForm({
             variant="outline"
             className="w-fit"
             onClick={() =>
-              ingredientsArray.append({ name: '', quantityText: '', unit: '' })
+              ingredientsArray.append({
+                name: '',
+                quantityText: '',
+                unit: '',
+                nutritionSource: null,
+              })
             }
           >
             <PlusIcon className="size-4" />
@@ -311,6 +537,36 @@ export function RecipeEditorForm({
           </Button>
         </CardContent>
       </Card>
+
+      <NutritionSummary
+        calculation={displayedNutrition}
+        title="Nutrition preview per serving"
+        pending={
+          nutritionCalculation.unresolvedIngredients.length > 0 &&
+          aiEstimate?.key !== nutritionInputKey
+        }
+      />
+      {nutritionCalculation.unresolvedIngredients.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit"
+            disabled={isEstimating}
+            onClick={() => void calculateAiEstimate()}
+          >
+            {isEstimating ? (
+              <Loader2Icon className="mr-2 size-4 animate-spin" />
+            ) : null}
+            {isEstimating ? 'Calculating macros…' : 'Calculate macros with AI'}
+          </Button>
+          {estimateError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {estimateError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>

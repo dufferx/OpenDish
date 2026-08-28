@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createImportRecipeHandler,
   sanitizeHtmlForAi,
@@ -6,16 +6,17 @@ import {
   type ImportRecipeOptions,
   type SafeFetchFailure,
   type SafeFetchResult,
+  type VideoImportFailure,
+  type VideoImportSuccess,
 } from '../import-recipe/handler.ts';
 import {
   err,
   FakeAiProvider,
   makeQuantity,
   ok,
-  recipeDraftSchema,
   type RecipeDraft,
 } from '../../../packages/contracts/src/index.ts';
-import type { AuthResult, AuthVerifier } from '../_shared/http.ts';
+import type { AuthVerifier } from '../_shared/http.ts';
 import type { AiCredentials } from '../../../packages/contracts/src/index.ts';
 
 const TEST_USER = '00000000-0000-0000-0000-000000000001';
@@ -43,6 +44,14 @@ function staticFetch(
   result: SafeFetchResult | SafeFetchFailure,
 ): ImportRecipeOptions['safeFetch'] {
   return async () => result;
+}
+
+function staticVideoImport(
+  result: VideoImportSuccess | VideoImportFailure,
+): ImportRecipeOptions['videoImport'] {
+  return {
+    fetchMetadata: vi.fn().mockResolvedValue(result),
+  };
 }
 
 function fakeAiConfigReader(
@@ -102,6 +111,11 @@ describe('import-recipe handler', () => {
       provider: new FakeAiProvider(),
       safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
       aiConfigReader: fakeAiConfigReader(null),
+      videoImport: staticVideoImport({
+        ok: false,
+        errorCode: 'fetch_failed',
+        message: '',
+      }),
     });
     const response = await handler(
       new Request('http://localhost/import-recipe', { method: 'GET' }),
@@ -117,6 +131,11 @@ describe('import-recipe handler', () => {
       provider: new FakeAiProvider(),
       safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
       aiConfigReader: fakeAiConfigReader(null),
+      videoImport: staticVideoImport({
+        ok: false,
+        errorCode: 'fetch_failed',
+        message: '',
+      }),
     });
     const response = await handler(makeRequest({ mode: 'text', text: 'recipe' }));
     expect(response.status).toBe(401);
@@ -130,6 +149,11 @@ describe('import-recipe handler', () => {
       provider: new FakeAiProvider(),
       safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
       aiConfigReader: fakeAiConfigReader(null),
+      videoImport: staticVideoImport({
+        ok: false,
+        errorCode: 'fetch_failed',
+        message: '',
+      }),
     });
     const response = await handler(makeRequest({ mode: 'unknown' }));
     expect(response.status).toBe(400);
@@ -149,6 +173,11 @@ describe('import-recipe handler', () => {
           finalUrl: 'https://example.com/pancakes',
         }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://example.com/pancakes' }),
@@ -175,6 +204,11 @@ describe('import-recipe handler', () => {
           apiKey: 'sk-test',
           model: 'gpt-4o-mini',
         }),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://example.com/about' }),
@@ -200,6 +234,11 @@ describe('import-recipe handler', () => {
           finalUrl: 'https://example.com/about',
         }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://example.com/about' }),
@@ -226,6 +265,11 @@ describe('import-recipe handler', () => {
           apiKey: 'sk-test',
           model: 'gpt-4o-mini',
         }),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://example.com/about' }),
@@ -245,6 +289,11 @@ describe('import-recipe handler', () => {
           message: 'Only https:// URLs can be imported.',
         }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'http://example.com/recipe' }),
@@ -264,6 +313,11 @@ describe('import-recipe handler', () => {
           message: 'The page could not be fetched.',
         }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://example.com/recipe' }),
@@ -273,8 +327,53 @@ describe('import-recipe handler', () => {
       expect(body.error.code).toBe('fetch_failed');
     });
 
-    it('returns unsupported_url for Instagram links without fetching or calling AI', async () => {
-      const provider = new FakeAiProvider();
+    it('routes Instagram Reels to the video metadata service and returns extractionMethod video_metadata', async () => {
+      const provider = new FakeAiProvider({ extractRecipe: ok(VALID_AI_DRAFT) });
+      const safeFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        errorCode: 'fetch_failed',
+        message: '',
+      } satisfies SafeFetchFailure);
+      const videoImport = {
+        fetchMetadata: vi.fn().mockResolvedValue({
+          ok: true,
+          title: 'Weeknight Pasta',
+          description: '1 lb pasta, tomato sauce, basil.',
+        } satisfies VideoImportSuccess),
+      };
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider,
+        safeFetch,
+        aiConfigReader: fakeAiConfigReader({
+          apiKey: 'sk-test',
+          model: 'gpt-4o-mini',
+        }),
+        videoImport,
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.instagram.com/reel/Da5N3vyovxI/' }),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.extractionMethod).toBe('video_metadata');
+      expect(videoImport.fetchMetadata).toHaveBeenCalledWith(
+        'https://www.instagram.com/reel/Da5N3vyovxI/',
+      );
+      expect(safeFetch).not.toHaveBeenCalled();
+      expect(provider.calls).toHaveLength(1);
+      expect(provider.calls[0]?.rawContent).toContain('1 lb pasta');
+    });
+
+    it('routes TikTok videos to the video metadata service', async () => {
+      const provider = new FakeAiProvider({ extractRecipe: ok(VALID_AI_DRAFT) });
+      const videoImport = {
+        fetchMetadata: vi.fn().mockResolvedValue({
+          ok: true,
+          title: 'TikTok Lentils',
+          description: '2 cups lentils, simmer 20 minutes.',
+        } satisfies VideoImportSuccess),
+      };
       const handler = createImportRecipeHandler({
         verifyAuth: authVerifier(),
         provider,
@@ -283,29 +382,147 @@ describe('import-recipe handler', () => {
           apiKey: 'sk-test',
           model: 'gpt-4o-mini',
         }),
+        videoImport,
       });
       const response = await handler(
-        makeRequest({ mode: 'url', url: 'https://www.instagram.com/reel/Da5N3vyovxI/' }),
+        makeRequest({ mode: 'url', url: 'https://www.tiktok.com/@cook/video/12345' }),
       );
-      expect(response.status).toBe(422);
+      expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body.error.code).toBe('unsupported_url');
-      expect(provider.calls).toHaveLength(0);
+      expect(body.extractionMethod).toBe('video_metadata');
+      expect(videoImport.fetchMetadata).toHaveBeenCalledWith(
+        'https://www.tiktok.com/@cook/video/12345',
+      );
     });
 
-    it('returns unsupported_url for YouTube Shorts links', async () => {
+    it('routes YouTube Shorts to the video metadata service', async () => {
+      const provider = new FakeAiProvider({ extractRecipe: ok(VALID_AI_DRAFT) });
+      const videoImport = {
+        fetchMetadata: vi.fn().mockResolvedValue({
+          ok: true,
+          title: 'Shorts Chili',
+          description: 'Beans, tomatoes, chili powder.',
+        } satisfies VideoImportSuccess),
+      };
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider,
+        safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
+        aiConfigReader: fakeAiConfigReader({
+          apiKey: 'sk-test',
+          model: 'gpt-4o-mini',
+        }),
+        videoImport,
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.youtube.com/shorts/abc123' }),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.extractionMethod).toBe('video_metadata');
+      expect(videoImport.fetchMetadata).toHaveBeenCalledWith(
+        'https://www.youtube.com/shorts/abc123',
+      );
+    });
+
+    it('keeps unsupported-platform handling for Facebook video links', async () => {
       const handler = createImportRecipeHandler({
         verifyAuth: authVerifier(),
         provider: new FakeAiProvider(),
         safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.facebook.com/watch/?v=123' }),
+      );
+      expect(response.status).toBe(422);
+      const body = await response.json();
+      expect(body.error.code).toBe('unsupported_url');
+    });
+
+    it('returns a clear recoverable failure when video metadata extraction is blocked upstream', async () => {
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider: new FakeAiProvider(),
+        safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
+        aiConfigReader: fakeAiConfigReader({
+          apiKey: 'sk-test',
+          model: 'gpt-4o-mini',
+        }),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message:
+            'Instagram Reel metadata is currently blocked upstream. Copy the caption or description and use paste text instead.',
+        }),
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.instagram.com/reel/C9abc123/' }),
+      );
+      expect(response.status).toBe(422);
+      const body = await response.json();
+      expect(body.error.code).toBe('fetch_failed');
+      expect(body.error.message).toContain('Copy the caption or description');
+    });
+
+    it('returns no_recipe_found when a supported video has no usable description metadata', async () => {
+      const provider = new FakeAiProvider({ extractRecipe: ok(VALID_AI_DRAFT) });
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider,
+        safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
+        aiConfigReader: fakeAiConfigReader({
+          apiKey: 'sk-test',
+          model: 'gpt-4o-mini',
+        }),
+        videoImport: staticVideoImport({
+          ok: true,
+          title: 'No Caption',
+          description: '   ',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://www.youtube.com/shorts/abc123' }),
       );
       expect(response.status).toBe(422);
       const body = await response.json();
-      expect(body.error.code).toBe('unsupported_url');
+      expect(body.error.code).toBe('no_recipe_found');
+      expect(provider.calls).toHaveLength(0);
+    });
+
+    it('maps invalid AI output from video metadata extraction to no_recipe_found', async () => {
+      const provider = new FakeAiProvider({
+        extractRecipe: err({
+          code: 'invalid_ai_output',
+          message: 'No recipe found.',
+        }),
+      });
+      const handler = createImportRecipeHandler({
+        verifyAuth: authVerifier(),
+        provider,
+        safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
+        aiConfigReader: fakeAiConfigReader({
+          apiKey: 'sk-test',
+          model: 'gpt-4o-mini',
+        }),
+        videoImport: staticVideoImport({
+          ok: true,
+          title: 'Sparse Caption',
+          description: 'Follow for more recipes.',
+        }),
+      });
+      const response = await handler(
+        makeRequest({ mode: 'url', url: 'https://www.tiktok.com/@cook/video/12345' }),
+      );
+      expect(response.status).toBe(422);
+      const body = await response.json();
+      expect(body.error.code).toBe('no_recipe_found');
+      expect(body.error.message).toContain('Paste text');
     });
 
     it('propagates SSRF blocked_address as unsupported_url', async () => {
@@ -318,6 +535,11 @@ describe('import-recipe handler', () => {
           message: 'The URL points to a non-public network address.',
         }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'url', url: 'https://192.168.1.1/recipe' }),
@@ -339,6 +561,11 @@ describe('import-recipe handler', () => {
           apiKey: 'sk-test',
           model: 'gpt-4o-mini',
         }),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'text', text: 'Pasta with tomato sauce.' }),
@@ -358,6 +585,11 @@ describe('import-recipe handler', () => {
         provider,
         safeFetch: staticFetch({ ok: false, errorCode: 'fetch_failed', message: '' }),
         aiConfigReader: fakeAiConfigReader(null),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'text', text: 'Some recipe text.' }),
@@ -383,6 +615,11 @@ describe('import-recipe handler', () => {
           apiKey: 'sk-test',
           model: 'gpt-4o-mini',
         }),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
+        }),
       });
       const response = await handler(
         makeRequest({ mode: 'text', text: 'Bad recipe.' }),
@@ -406,6 +643,11 @@ describe('import-recipe handler', () => {
         aiConfigReader: fakeAiConfigReader({
           apiKey: 'sk-test',
           model: 'gpt-4o-mini',
+        }),
+        videoImport: staticVideoImport({
+          ok: false,
+          errorCode: 'fetch_failed',
+          message: '',
         }),
       });
       const response = await handler(

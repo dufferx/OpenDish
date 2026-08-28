@@ -56,9 +56,22 @@ export function useRecipeActions() {
                   den: ingredient.quantityDen ?? 1,
                 },
           unit: ingredient.unit,
+          nutritionSource:
+            ingredient.nutritionFoodId != null
+              ? {
+                  sourceType: 'generic_food',
+                  sourceId: ingredient.nutritionFoodId,
+                }
+              : ingredient.userProductId != null
+                ? {
+                    sourceType: 'user_product',
+                    sourceId: ingredient.userProductId,
+                  }
+                : null,
         })),
         steps: steps.map((step) => ({ text: step.text })),
         tags,
+        nutrition: recipe.nutrition,
       });
     },
     onSuccess: () => {
@@ -115,6 +128,9 @@ export function useRecipeActions() {
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({
         queryKey: ['recipe', variables.recipe.id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['recipe-state', variables.recipe.id],
       });
       void queryClient.invalidateQueries({ queryKey: ['recipes'] });
       toast.success('Serving adjustment saved.');

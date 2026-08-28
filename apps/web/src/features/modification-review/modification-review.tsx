@@ -19,6 +19,7 @@ export interface ModificationReviewProps {
   onSaveAsVariant: () => void | Promise<void>;
   onDiscard: () => void | Promise<void>;
   onRegenerate: () => void | Promise<void>;
+  showVariant?: boolean;
 }
 
 function operationLabel(operation: ModificationOp, current: RecipeDraft) {
@@ -106,6 +107,7 @@ export function ModificationReview({
   onSaveAsVariant,
   onDiscard,
   onRegenerate,
+  showVariant = true,
 }: ModificationReviewProps) {
   const actionPending = pendingAction !== null;
 
@@ -180,16 +182,18 @@ export function ModificationReview({
           >
             {pendingAction === 'apply' ? 'Applying…' : 'Apply changes'}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={actionPending || isStale}
-            onClick={() => void onSaveAsVariant()}
-          >
-            {pendingAction === 'variant'
-              ? 'Saving variant…'
-              : 'Save as variant'}
-          </Button>
+          {showVariant ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={actionPending || isStale}
+              onClick={() => void onSaveAsVariant()}
+            >
+              {pendingAction === 'variant'
+                ? 'Saving variant…'
+                : 'Save as variant'}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"

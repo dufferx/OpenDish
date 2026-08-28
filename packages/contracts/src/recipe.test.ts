@@ -4,6 +4,7 @@ import {
   makeQuantity,
   quantitySchema,
   recipeDraftSchema,
+  recipeImportExtractionMethodSchema,
   recipeSnapshotSchema,
   stepSchema,
 } from './recipe.ts';
@@ -157,6 +158,23 @@ describe('recipeSnapshotSchema', () => {
         .success,
     ).toBe(true);
     expect(recipeSnapshotSchema.safeParse(validRecipeDraft).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('recipeImportExtractionMethodSchema', () => {
+  it('accepts the supported extraction methods and rejects unknown values', () => {
+    expect(recipeImportExtractionMethodSchema.safeParse('structured_markup').success).toBe(
+      true,
+    );
+    expect(recipeImportExtractionMethodSchema.safeParse('ai').success).toBe(
+      true,
+    );
+    expect(recipeImportExtractionMethodSchema.safeParse('video_metadata').success).toBe(
+      true,
+    );
+    expect(recipeImportExtractionMethodSchema.safeParse('unknown').success).toBe(
       false,
     );
   });

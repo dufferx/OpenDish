@@ -122,6 +122,16 @@ describe('ImportRecipePage (T040/T042)', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders the updated supported-platform copy for URL imports', () => {
+    renderPage();
+
+    expect(
+      screen.getByText(
+        /Instagram Reels, TikTok videos, and YouTube Shorts/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('extracts from pasted text and shows the review screen', async () => {
     mockImportRecipe.mockResolvedValue(SUCCESS_RESULT);
     const { user } = renderPage();
@@ -185,6 +195,26 @@ describe('ImportRecipePage (T040/T042)', () => {
       name: /create the recipe manually instead/i,
     });
     expect(manualLink).toHaveAttribute('href', '/recipes/new');
+  });
+
+  it('shows the video metadata review banner when the import result uses that extraction method', async () => {
+    mockImportRecipe.mockResolvedValue({
+      ...SUCCESS_RESULT,
+      extractionMethod: 'video_metadata',
+    });
+    const { user } = renderPage();
+
+    await user.type(
+      screen.getByLabelText(/Recipe URL/i),
+      'https://www.instagram.com/reel/C9abc123/',
+    );
+    await user.click(screen.getByRole('button', { name: /Extract recipe/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Extracted from a video caption or description/i),
+      ).toBeInTheDocument();
+    });
   });
 
   it('returns to the import form when the review is discarded', async () => {

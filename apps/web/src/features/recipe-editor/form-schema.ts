@@ -8,6 +8,13 @@ export const formIngredientSchema = z.object({
   name: z.string().min(1, 'Ingredient name is required').max(300),
   quantityText: z.string().max(50),
   unit: z.string().max(50),
+  nutritionSource: z
+    .object({
+      sourceType: z.enum(['generic_food', 'user_product']),
+      sourceId: z.string().uuid(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const formStepSchema = z.object({
@@ -83,6 +90,7 @@ export function parseRecipeFormValues(
       name: ingredient.name.trim(),
       quantity,
       unit: ingredient.unit.trim() === '' ? null : ingredient.unit.trim(),
+      nutritionSource: ingredient.nutritionSource,
     };
   });
 

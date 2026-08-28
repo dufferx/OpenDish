@@ -70,6 +70,9 @@ export function useRecipeMutation() {
     onSuccess: ({ recipeId }) => {
       void queryClient.invalidateQueries({ queryKey: ['recipes'] });
       void queryClient.invalidateQueries({ queryKey: ['recipe', recipeId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['recipe-state', recipeId],
+      });
     },
     onError: (error) => {
       toast.error(

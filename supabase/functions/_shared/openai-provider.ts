@@ -9,6 +9,7 @@ import {
   ok,
   recipeDraftSchema,
   modificationProposalSchema,
+  productLabelDraftSchema,
 } from '../../../packages/contracts/src/index.ts';
 import type {
   AiCredentials,
@@ -19,6 +20,9 @@ import type {
   ModificationProposal,
   RecipeDraft,
   RecipeSnapshot,
+  ProductLabelDraft,
+  NutritionEstimateIngredient,
+  NutritionEstimateItem,
   Result,
 } from '../../../packages/contracts/src/index.ts';
 import { z } from 'zod';
@@ -43,8 +47,65 @@ const UNTRUSTED_DATA_NOTE =
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content:
+    | string
+    | (
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      )[];
 }
+
+const productLabelJsonSchema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    brand: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    servingSizeText: { type: 'string' },
+    servingMassG: { anyOf: [{ type: 'number', exclusiveMinimum: 0 }, { type: 'null' }] },
+    servingVolumeMl: { anyOf: [{ type: 'number', exclusiveMinimum: 0 }, { type: 'null' }] },
+    calories: { type: 'number', minimum: 0 },
+    proteinGrams: { type: 'number', minimum: 0 },
+    carbohydratesGrams: { type: 'number', minimum: 0 },
+  },
+  required: [
+    'name', 'brand', 'servingSizeText', 'servingMassG', 'servingVolumeMl',
+    'calories', 'proteinGrams', 'carbohydratesGrams',
+  ],
+  additionalProperties: false,
+} as const;
+
+const nutritionEstimateJsonSchema = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          calories: { type: 'number', minimum: 0 },
+          proteinGrams: { type: 'number', minimum: 0 },
+          carbohydratesGrams: { type: 'number', minimum: 0 },
+        },
+        required: ['name', 'calories', 'proteinGrams', 'carbohydratesGrams'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['items'],
+  additionalProperties: false,
+} as const;
+
+const nutritionEstimateSchema = z.object({
+  items: z.array(
+    z.object({
+      name: z.string().min(1).max(300),
+      calories: z.number().finite().nonnegative(),
+      proteinGrams: z.number().finite().nonnegative(),
+      carbohydratesGrams: z.number().finite().nonnegative(),
+    }),
+  ),
+});
 
 // JSON Schema mirrors of the contracts Zod schemas, used to constrain the
 // provider's structured output. The Zod schemas remain the authoritative
@@ -555,6 +616,65 @@ export function createOpenAiProvider(
         { name: 'recipe_draft', schema: recipeDraftJsonSchema },
         recipeDraftSchema,
       );
+    },
+
+    async extractProductLabel(
+      imageDataUrl: string,
+      credentials: AiCredentials,
+    ): Promise<Result<ProductLabelDraft>> {
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content:
+            'You read a packaged food nutrition label. Extract only values ' +
+            'that are visibly present. Return null for unknown brand, grams, ' +
+            'or millilitres. Never infer missing nutrition values. This is a ' +
+            'draft for a human to verify, not a final nutrition calculation. ' +
+            UNTRUSTED_DATA_NOTE,
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Extract the nutrition label into the schema.' },
+            { type: 'image_url', image_url: { url: imageDataUrl } },
+          ],
+        },
+      ];
+      return structuredCompletion(
+        credentials,
+        messages,
+        { name: 'product_label_draft', schema: productLabelJsonSchema },
+        productLabelDraftSchema,
+      );
+    },
+
+    async estimateNutrition(
+      ingredients: NutritionEstimateIngredient[],
+      credentials: AiCredentials,
+    ): Promise<Result<NutritionEstimateItem[]>> {
+      const payload = ingredients.map((ingredient) => ({
+        name: ingredient.name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+      }));
+      const result = await structuredCompletion(
+        credentials,
+        [
+          {
+            role: 'system',
+            content:
+              'Estimate calories, protein, and carbohydrates for each listed ingredient. ' +
+              'Return each item as its total contribution for the stated amount. ' +
+              'Use common food composition knowledge, account for the unit, and be conservative. ' +
+              'These are estimates, never claim label-level precision. ' +
+              UNTRUSTED_DATA_NOTE,
+          },
+          { role: 'user', content: `<untrusted>${JSON.stringify(payload)}</untrusted>` },
+        ],
+        { name: 'nutrition_estimate', schema: nutritionEstimateJsonSchema },
+        nutritionEstimateSchema,
+      );
+      return result.ok ? ok(result.value.items) : result;
     },
   };
 }

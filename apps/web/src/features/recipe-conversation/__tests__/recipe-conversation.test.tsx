@@ -125,7 +125,7 @@ describe('RecipeConversation', () => {
 
     expect(await screen.findByText('Can I freeze this?')).toBeVisible();
     expect(screen.getByText('Yes, freeze it after cooling.')).toBeVisible();
-    expect(screen.getAllByText('OpenDish AI').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Dishy').length).toBeGreaterThan(0);
     expect(
       screen.getByRole('radio', { name: /Answer a question/i }),
     ).toBeChecked();

@@ -365,3 +365,162 @@ those values estimates/averages rather than laboratory-exact measurements.
   unresolved ingredients can be estimated through the authenticated user's
   BYOK provider. Combined totals are marked estimated; failures remain
   incomplete without blocking recipe saves.
+
+## Candidate Feature: AI assistant in draft review and recipe editor
+
+### Status
+
+In discovery; not approved for implementation yet.
+
+### User Goal
+
+Allow the user to ask the AI to adjust the recipe in two additional places:
+
+1. After AI generation, while the recipe is still a draft and is being
+   reviewed.
+2. While editing a recipe that has already been saved.
+
+The user should be able to review the proposed changes, see the resulting
+macros update, and decide when the recipe is actually saved.
+
+### Verified Current Architecture
+
+- `apps/web/src/features/recipe-conversation/recipe-conversation.tsx` already
+  provides a recipe-scoped assistant with answer and modification intents.
+- `supabase/functions/ai-recipe-chat/handler.ts` and
+  `supabase/functions/ai-propose-modification/handler.ts` require a persisted
+  `recipeId` and use the authenticated user's BYOK configuration.
+- `packages/contracts/src/modification.ts` defines structured operations and a
+  complete resulting `RecipeDraft`.
+- `supabase/functions/_shared/recipe-modification.ts` validates the operation
+  list and deterministically rebuilds the resulting recipe; the model's copy
+  of the resulting recipe is not trusted.
+- `apps/web/src/features/modification-review/modification-review.tsx` already
+  presents current versus suggested content and supports apply, variant,
+  discard, and regeneration states.
+- `apps/web/src/features/recipe-import/review-screen.tsx` receives an
+  unsaved `RecipeDraft` and passes it to `RecipeEditorForm`; no recipe ID or
+  persisted conversation exists at this point.
+- `apps/web/src/features/recipe-editor/recipe-editor-page.tsx` owns the saved
+  recipe edit form and only writes through the shared mutation when the user
+  submits the form.
+
+### Viability Assessment
+
+#### Draft review after AI generation: viable, medium complexity
+
+The current saved-recipe assistant cannot be reused unchanged because the
+draft has no database identity. Saving a temporary recipe merely to enable the
+assistant would create unwanted records and complicate history and cleanup.
+
+Recommended approach: add an authenticated, stateless preview operation that
+accepts the current validated `RecipeDraft` and the user's request, invokes the
+existing provider proposal method, validates the operations, and returns a
+proposal. The browser keeps the conversation/proposal in local state. Applying
+the proposal updates the form locally; it does not write to the database.
+
+#### Saved recipe editor: highly viable, medium complexity
+
+The existing proposal engine and structured operations are a strong fit, but
+the editor must not apply changes directly to the database before the user
+clicks `Save changes`. The assistant should receive the current unsaved form
+values, return a proposal, and on acceptance replace the form values locally.
+The normal editor submit then performs the authoritative nutrition calculation,
+versioned save, and history snapshot.
+
+Using the detail-page assistant unchanged inside the editor is not recommended:
+its current apply action persists immediately and could overwrite or diverge
+from other unsaved changes in the form.
+
+### Recommended UX
+
+- Add an `Adjust with AI` action near the draft/editor heading. Open the
+  assistant in a drawer so the form remains visible on mobile and desktop.
+- Send the complete current draft, including ingredient source references and
+  existing nutrition state, as context for each adjustment.
+- Show the user's request, a concise summary, a list of operations, and a
+  current-versus-suggested preview.
+- Use `Apply changes` and `Discard`; applying changes updates only local form
+  state until the user saves.
+- Recalculate deterministic macros immediately after applying a proposal. If
+  the change introduces an unresolved ingredient, retain the transparent
+  estimated/incomplete state and offer the existing AI estimation action.
+- Preserve pantry product selections unless the user explicitly asks to
+  change a product or ingredient source.
+- Keep the existing BYOK availability, loading, error, retry, and request
+  length behavior.
+
+### Recommended Technical Shape
+
+Create a reusable “recipe draft modification preview” path rather than
+duplicating prompt or validation logic:
+
+- Shared input/output contract for `RecipeDraft` plus a bounded user request.
+- Authenticated Edge Function with no recipe write and no requirement for a
+  persisted `recipeId`.
+- Reuse `proposeRecipeModification`, `modificationOpSchema`,
+  `applyModificationOperations`, and `validateModificationProposal`.
+- For the draft review and editor, calculate macros from the accepted local
+  draft using the existing deterministic calculator. Do not ask the AI to be
+  the nutrition source of truth.
+- Keep the existing recipe-scoped conversation/proposal workflow for the
+  detail page, where persistence and optimistic `headVersion` checks are
+  appropriate.
+
+### Risks and Required Safeguards
+
+- Draft payloads and user instructions are untrusted input; validate size and
+  schema at the Edge Function boundary and keep provider output structured.
+- A proposal must be applied deterministically from operations, never by
+  trusting free-form model output.
+- Editor proposals must be based on the latest form state, including unsaved
+  edits, or the UI could silently revert user changes.
+- Nutrition must be recalculated after accepted operations, including serving
+  changes, ingredient additions/removals, and pantry-source changes.
+- Saved-recipe proposals still need the existing stale-version protection.
+
+### Scope and Validation Needed Before Implementation
+
+- Define whether the draft/editor assistant should show only a single pending
+  proposal or retain a local multi-turn conversation.
+- Add contract and Edge Function tests for valid/invalid drafts, provider
+  failures, operation validation, and no-write behavior.
+- Add web tests for opening the drawer, applying/discarding changes, preserving
+  source selectors, syncing form state, and recalculating macros.
+- Verify the full flow on mobile and desktop, including AI unavailable,
+  loading, retry, and unsaved-change states.
+
+### Open Decisions
+
+1. Should draft/editor changes always use the same proposal review UI as saved
+   recipes, or can the user opt into direct local application for simple
+   requests?
+2. Should the assistant keep a local conversation after each accepted change,
+   or should each request start from the latest form state with only the
+   visible current interaction retained?
+3. Should an accepted AI change automatically run the existing AI nutrition
+   fallback when local calculation has unresolved ingredients, or only offer
+   the explicit `Calculate macros with AI` action?
+
+### Confirmed Decisions
+
+- Draft and editor changes always require review before applying.
+- The assistant keeps a local multi-turn conversation; every request uses the
+  latest local draft as context and no conversation is persisted before save.
+- Accepted changes recalculate macros locally. AI macro estimation remains an
+  explicit user action when ingredients are unresolved, avoiding unexpected
+  API calls and latency.
+
+### Phase D.5 Implementation Notes
+
+- Added the authenticated `ai-preview-modification` Edge Function. It accepts
+  a validated draft and request, returns a structured proposal, performs no
+  recipe or conversation write, and reuses deterministic proposal validation.
+- Added a local multi-turn `Adjust with AI` drawer to generated-recipe review
+  and saved-recipe editing. Accepted proposals update only the form; the
+  existing save action remains the persistence boundary.
+- Named the recipe assistant mascot `Dishy` throughout the AI surfaces.
+- Reused the existing modification review component while hiding the
+  saved-recipe-only variant action in local draft flows.
+- Verified with full typecheck, web tests (209 passed, 20 skipped), Edge
+  Function tests (137 passed), lint, and production build.

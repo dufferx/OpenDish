@@ -34,6 +34,7 @@ import { getRecipeImageUrl, validateRecipeImage } from '@/lib/recipe-images.ts';
 import type { NutritionSourceOption } from '@/features/products/nutrition-source-queries.ts';
 import { parseQuantityInput } from '@/domain/rational.ts';
 import { NutritionSummary } from '@/features/recipes/nutrition-summary.tsx';
+import { RecipeDraftAssistant } from '@/features/recipe-conversation';
 import {
   estimateItemsToRecord,
   estimateMissingNutrition,
@@ -65,6 +66,8 @@ export interface RecipeEditorFormProps {
   aiEstimateNote?: ReactNode;
   nutritionSources?: NutritionSourceOption[];
   isLoadingNutritionSources?: boolean;
+  /** Enables the local, review-before-apply AI assistant for this draft. */
+  enableDraftAssistant?: boolean;
 }
 
 const defaultValues: RecipeFormValues = {
@@ -114,6 +117,7 @@ export function RecipeEditorForm({
   aiEstimateNote,
   nutritionSources = [],
   isLoadingNutritionSources = false,
+  enableDraftAssistant = false,
 }: RecipeEditorFormProps) {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState<string | null>(null);
@@ -153,6 +157,10 @@ export function RecipeEditorForm({
     name: 'ingredients',
   });
   const watchedValues = useWatch({ control });
+  const parsedWatchedDraft = useMemo(
+    () => parseRecipeFormValues(watchedValues as RecipeFormValues),
+    [watchedValues],
+  );
   const nutritionCalculation = useMemo(() => {
     const sourceByKey = new Map(
       nutritionSources.map((source) => [
@@ -312,12 +320,49 @@ export function RecipeEditorForm({
 
   const displayedImageUrl = imagePreviewUrl ?? existingImageUrl;
 
+  function applyAssistantDraft(nextDraft: RecipeDraft) {
+    form.reset({
+      title: nextDraft.title,
+      description: nextDraft.description,
+      servings: nextDraft.servings,
+      prepTimeMinutes: nextDraft.prepTimeMinutes,
+      cookTimeMinutes: nextDraft.cookTimeMinutes,
+      sourceName: nextDraft.sourceName,
+      sourceUrl: nextDraft.sourceUrl,
+      ingredients: nextDraft.ingredients.map((ingredient) => ({
+        name: ingredient.name,
+        quantityText: ingredient.quantity
+          ? `${ingredient.quantity.num}/${ingredient.quantity.den}`
+          : '',
+        unit: ingredient.unit ?? '',
+        nutritionSource: ingredient.nutritionSource ?? null,
+      })),
+      steps: nextDraft.steps.map((step) => ({ text: step.text })),
+      tags: nextDraft.tags,
+    });
+  }
+
   return (
     <form
       onSubmit={handleSubmit(handleFormSubmit)}
       className="flex flex-col gap-6"
       aria-label="Recipe editor"
     >
+      {enableDraftAssistant ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Need to adjust the recipe? Ask AI and review the changes first.
+          </p>
+          <RecipeDraftAssistant
+            draft={
+              Object.keys(parsedWatchedDraft.fieldErrors).length === 0
+                ? parsedWatchedDraft.draft
+                : null
+            }
+            onApply={applyAssistantDraft}
+          />
+        </div>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Basics</CardTitle>

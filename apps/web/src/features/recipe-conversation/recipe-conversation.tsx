@@ -469,7 +469,7 @@ export function RecipeConversation({
             className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-black/10"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Ask OpenDish AI</p>
+            <p className="text-sm font-semibold">Ask Dishy</p>
             <p className="truncate text-xs text-muted-foreground">
               Chat about {recipe.title}
             </p>
@@ -499,7 +499,7 @@ export function RecipeConversation({
               className="size-11 rounded-xl object-cover ring-1 ring-black/10"
             />
             <div className="min-w-0 flex-1">
-              <DrawerTitle id="recipe-assistant-title">OpenDish AI</DrawerTitle>
+              <DrawerTitle id="recipe-assistant-title">Dishy</DrawerTitle>
               <DrawerDescription className="truncate">
                 Talking about {recipe.title}
               </DrawerDescription>
@@ -602,7 +602,7 @@ export function RecipeConversation({
                             : 'mb-1.5 text-right text-xs font-medium text-muted-foreground'
                         }
                       >
-                        {item.role === 'assistant' ? 'OpenDish AI' : 'You'}
+                        {item.role === 'assistant' ? 'Dishy' : 'You'}
                       </p>
                       <p
                         className={
@@ -631,7 +631,7 @@ export function RecipeConversation({
                     />
                     <div className="min-w-0 flex-1">
                       <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                        <SparklesIcon className="size-3.5" /> OpenDish AI
+                        <SparklesIcon className="size-3.5" /> Dishy
                       </p>
                       <ModificationReview
                         currentRecipe={currentRecipe}
@@ -776,7 +776,7 @@ export function RecipeConversation({
             </div>
 
             <div className="mt-2 flex min-h-6 items-center justify-between gap-3 text-[0.68rem] text-muted-foreground">
-              <p>OpenDish AI uses this recipe as context.</p>
+              <p>Dishy uses this recipe as context.</p>
               {isSending ? (
                 <Button
                   type="button"

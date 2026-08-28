@@ -205,6 +205,7 @@ export function RecipeEditorPage({ mode }: RecipeEditorPageProps) {
         submitLabel={mode === 'create' ? 'Create recipe' : 'Save changes'}
         nutritionSources={nutritionSources}
         isLoadingNutritionSources={isLoadingNutritionSources}
+        enableDraftAssistant
       />
     </section>
   );

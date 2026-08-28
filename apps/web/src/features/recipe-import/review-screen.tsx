@@ -198,6 +198,7 @@ export function ReviewScreen({
         }
         nutritionSources={nutritionSources}
         isLoadingNutritionSources={nutritionSources.length === 0}
+        enableDraftAssistant
       />
 
       <div className="flex justify-center">

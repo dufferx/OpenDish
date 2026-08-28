@@ -1,5 +1,5 @@
 import { UserIcon } from 'lucide-react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { NAV_ITEMS } from '@/app/nav-items';
 import mascotImage from '@/assets/mascot.jpg';
@@ -76,6 +76,11 @@ function UserAvatarLink() {
 }
 
 export function AppLayout() {
+  const location = useLocation();
+  const isCookingMode = /^\/recipes\/[^/]+\/cook\/?$/.test(location.pathname);
+
+  if (isCookingMode) return <Outlet />;
+
   return (
     <div className="flex min-h-screen flex-col">
       <a

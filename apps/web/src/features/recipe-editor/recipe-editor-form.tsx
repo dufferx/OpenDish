@@ -14,6 +14,7 @@ import {
   Controller,
   type FieldError,
   useWatch,
+  type Resolver,
 } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
@@ -81,7 +82,7 @@ const defaultValues: RecipeFormValues = {
   ingredients: [
     { name: '', quantityText: '', unit: '', nutritionSource: null },
   ],
-  steps: [{ text: '' }],
+  steps: [{ text: '', durationSeconds: null }],
   tags: [],
 };
 
@@ -133,7 +134,9 @@ export function RecipeEditorForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<RecipeFormValues>({
-    resolver: zodResolver(recipeFormSchema),
+    resolver: zodResolver(
+      recipeFormSchema,
+    ) as unknown as Resolver<RecipeFormValues>,
     defaultValues: mergeInitialValues(defaultValues, initialValues),
   });
 
@@ -337,7 +340,10 @@ export function RecipeEditorForm({
         unit: ingredient.unit ?? '',
         nutritionSource: ingredient.nutritionSource ?? null,
       })),
-      steps: nextDraft.steps.map((step) => ({ text: step.text })),
+      steps: nextDraft.steps.map((step) => ({
+        text: step.text,
+        durationSeconds: step.durationSeconds ?? null,
+      })),
       tags: nextDraft.tags,
     });
   }
@@ -591,6 +597,24 @@ export function RecipeEditorForm({
                 className="min-h-0 flex-1"
                 {...register(`steps.${index}.text`)}
               />
+              <div className="w-28 shrink-0">
+                <Label htmlFor={`step-${index}-duration`} className="sr-only">
+                  Timer seconds
+                </Label>
+                <Input
+                  id={`step-${index}-duration`}
+                  type="number"
+                  min={1}
+                  placeholder="Seconds"
+                  aria-label="Timer seconds (optional)"
+                  {...register(`steps.${index}.durationSeconds`, {
+                    setValueAs: (value) =>
+                      value === '' || value === null || value === undefined
+                        ? null
+                        : Number(value),
+                  })}
+                />
+              </div>
               <div className="flex flex-col gap-1">
                 <Button
                   type="button"
@@ -633,7 +657,9 @@ export function RecipeEditorForm({
             type="button"
             variant="outline"
             className="w-fit"
-            onClick={() => stepsArray.append({ text: '' })}
+            onClick={() =>
+              stepsArray.append({ text: '', durationSeconds: null })
+            }
           >
             <PlusIcon className="size-4" />
             Add step

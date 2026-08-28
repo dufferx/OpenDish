@@ -10,6 +10,7 @@ import { LoginPage } from '@/features/auth/login-page';
 import { RecipeEditorPage } from '@/features/recipe-editor';
 import { RecipeDetailPage, RecipeListPage } from '@/features/recipes';
 import { ProductsPage } from '@/features/products';
+import { CookingModePage } from '@/features/cooking-mode';
 
 /**
  * Route map. Placeholder pages are replaced by feature tasks
@@ -33,6 +34,7 @@ export function AppRoutes() {
           element={<RecipeEditorPage mode="create" />}
         />
         <Route path="recipes/:id" element={<RecipeDetailPage />} />
+        <Route path="recipes/:id/cook" element={<CookingModePage />} />
         <Route
           path="recipes/:id/edit"
           element={<RecipeEditorPage mode="edit" />}

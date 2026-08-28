@@ -22,7 +22,10 @@ export function draftToFormValues(draft: RecipeDraft): RecipeFormValues {
         ingredient.quantity === null ? '' : formatQuantity(ingredient.quantity),
       unit: ingredient.unit ?? '',
     })),
-    steps: draft.steps.map((step) => ({ text: step.text })),
+    steps: draft.steps.map((step) => ({
+      text: step.text,
+      durationSeconds: step.durationSeconds ?? null,
+    })),
     tags: draft.tags,
   };
 }

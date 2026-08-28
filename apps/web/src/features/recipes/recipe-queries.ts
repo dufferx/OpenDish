@@ -43,7 +43,7 @@ export interface RecipeDetail {
     quantity: Quantity | null;
     unit: string | null;
   }[];
-  steps: { text: string }[];
+  steps: { text: string; durationSeconds?: number | null }[];
   tags: string[];
   origin: string;
   headVersion: number;
@@ -252,7 +252,10 @@ export function useRecipeDetail(recipeId: string | undefined) {
                 ),
           unit: ingredient.unit,
         })),
-        steps: state.steps.map((step) => ({ text: step.text })),
+        steps: state.steps.map((step) => ({
+          text: step.text,
+          durationSeconds: step.durationSeconds,
+        })),
         tags: state.tags,
         origin: state.recipe.origin,
         headVersion: state.recipe.headVersion,

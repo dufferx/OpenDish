@@ -56,6 +56,7 @@ export type Ingredient = z.infer<typeof ingredientSchema>;
 
 export const stepSchema = z.object({
   text: z.string().min(1).max(5000),
+  durationSeconds: z.number().int().positive().nullable().optional(),
 });
 export type Step = z.infer<typeof stepSchema>;
 

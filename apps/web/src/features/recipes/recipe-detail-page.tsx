@@ -9,6 +9,7 @@ import {
   ShoppingCartIcon,
   Trash2Icon,
   UsersIcon,
+  ChefHatIcon,
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -330,6 +331,12 @@ export function RecipeDetailPage() {
             {recipe.isFavorite ? 'Favorited' : 'Favorite'}
           </Button>
           <Button asChild variant="outline" size="sm">
+            <Link to={`/recipes/${recipe.id}/cook`}>
+              <ChefHatIcon className="mr-1.5 size-4" />
+              Cook
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
             <Link to={`/recipes/${recipe.id}/edit`}>
               <EditIcon className="mr-1.5 size-4" />
               Edit
@@ -427,7 +434,15 @@ export function RecipeDetailPage() {
                     >
                       {index + 1}
                     </span>
-                    <p className="text-foreground">{step.text}</p>
+                    <div>
+                      <p className="text-foreground">{step.text}</p>
+                      {step.durationSeconds ? (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Timer: {Math.floor(step.durationSeconds / 60)}:
+                          {String(step.durationSeconds % 60).padStart(2, '0')}
+                        </p>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ol>

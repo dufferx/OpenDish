@@ -69,7 +69,10 @@ export function useRecipeActions() {
                   }
                 : null,
         })),
-        steps: steps.map((step) => ({ text: step.text })),
+        steps: steps.map((step) => ({
+          text: step.text,
+          durationSeconds: step.durationSeconds ?? null,
+        })),
         tags,
         nutrition: recipe.nutrition,
       });

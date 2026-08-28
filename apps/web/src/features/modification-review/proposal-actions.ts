@@ -187,7 +187,10 @@ function toRecipeDraft(state: StoredRecipeState): RecipeDraft {
       })),
     steps: [...state.steps]
       .sort((left, right) => left.position - right.position)
-      .map((step) => ({ text: step.text })),
+      .map((step) => ({
+        text: step.text,
+        durationSeconds: step.durationSeconds ?? null,
+      })),
     tags: state.tags,
   });
 }

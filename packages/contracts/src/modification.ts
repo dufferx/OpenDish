@@ -35,6 +35,7 @@ export const modificationOpSchema = z.discriminatedUnion('kind', [
     kind: z.literal('updateStep'),
     position: positionSchema,
     text: stepSchema.shape.text,
+    durationSeconds: stepSchema.shape.durationSeconds,
   }),
   z.object({
     kind: z.literal('reorderSteps'),

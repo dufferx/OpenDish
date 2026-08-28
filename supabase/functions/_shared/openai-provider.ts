@@ -138,7 +138,10 @@ const ingredientJsonSchema = {
 
 const stepJsonSchema = {
   type: 'object',
-  properties: { text: { type: 'string' } },
+  properties: {
+    text: { type: 'string' },
+    durationSeconds: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] },
+  },
   required: ['text'],
   additionalProperties: false,
 } as const;
@@ -232,6 +235,7 @@ const modificationOpJsonSchema = {
         kind: { const: 'updateStep' },
         position: positionField,
         text: { type: 'string' },
+        durationSeconds: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] },
       },
       required: ['kind', 'position', 'text'],
       additionalProperties: false,
@@ -606,6 +610,7 @@ export function createOpenAiProvider(
             'requested structured format: exact fractional ingredient ' +
             'quantities, ordered steps, servings, and times in minutes. ' +
             'Use null for unknown optional fields. ' +
+            'Only suggest durationSeconds when the step clearly states a waiting or cooking duration; never infer it from quantities or temperatures. ' +
             UNTRUSTED_DATA_NOTE,
         },
         { role: 'user', content: `<untrusted>${rawContent}</untrusted>` },

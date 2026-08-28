@@ -49,7 +49,10 @@ function storedStateToFormValues(state: StoredRecipeState): RecipeFormValues {
             ? { sourceType: 'user_product', sourceId: ingredient.userProductId }
             : null,
     })),
-    steps: state.steps.map((step) => ({ text: step.text })),
+    steps: state.steps.map((step) => ({
+      text: step.text,
+      durationSeconds: step.durationSeconds ?? null,
+    })),
     tags: state.tags,
   };
 }

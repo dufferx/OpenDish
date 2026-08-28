@@ -84,6 +84,18 @@ describe('stepSchema', () => {
     );
     expect(stepSchema.safeParse({ text: 'Mix well.' }).success).toBe(true);
   });
+
+  it('accepts optional positive durations and rejects zero', () => {
+    expect(
+      stepSchema.safeParse({ text: 'Simmer.', durationSeconds: 90 }).success,
+    ).toBe(true);
+    expect(
+      stepSchema.safeParse({ text: 'Simmer.', durationSeconds: null }).success,
+    ).toBe(true);
+    expect(
+      stepSchema.safeParse({ text: 'Simmer.', durationSeconds: 0 }).success,
+    ).toBe(false);
+  });
 });
 
 describe('recipeDraftSchema', () => {
@@ -165,17 +177,17 @@ describe('recipeSnapshotSchema', () => {
 
 describe('recipeImportExtractionMethodSchema', () => {
   it('accepts the supported extraction methods and rejects unknown values', () => {
-    expect(recipeImportExtractionMethodSchema.safeParse('structured_markup').success).toBe(
-      true,
-    );
+    expect(
+      recipeImportExtractionMethodSchema.safeParse('structured_markup').success,
+    ).toBe(true);
     expect(recipeImportExtractionMethodSchema.safeParse('ai').success).toBe(
       true,
     );
-    expect(recipeImportExtractionMethodSchema.safeParse('video_metadata').success).toBe(
-      true,
-    );
-    expect(recipeImportExtractionMethodSchema.safeParse('unknown').success).toBe(
-      false,
-    );
+    expect(
+      recipeImportExtractionMethodSchema.safeParse('video_metadata').success,
+    ).toBe(true);
+    expect(
+      recipeImportExtractionMethodSchema.safeParse('unknown').success,
+    ).toBe(false);
   });
 });

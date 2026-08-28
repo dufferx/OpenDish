@@ -51,7 +51,7 @@ export function createSupabaseRecipeConversationStore(
             .order('position'),
           client
             .from('recipe_steps')
-            .select('text, position')
+            .select('text, position, duration_seconds')
             .eq('recipe_id', recipeId)
             .order('position'),
           client.from('recipe_tags').select('tag_id').eq('recipe_id', recipeId),
@@ -102,6 +102,10 @@ export function createSupabaseRecipeConversationStore(
         })),
         steps: (stepsResult.data ?? []).map((row) => ({
           text: row.text as string,
+          durationSeconds:
+            row.duration_seconds === null || row.duration_seconds === undefined
+              ? null
+              : Number(row.duration_seconds),
         })),
         tags,
       });

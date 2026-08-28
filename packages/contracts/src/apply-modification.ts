@@ -72,9 +72,15 @@ function applyOperation(
       };
     }
     case 'updateStep': {
-      requirePosition(recipe.steps, operation.position);
+      const current = requirePosition(recipe.steps, operation.position);
       const steps: Step[] = [...recipe.steps];
-      steps[operation.position] = { text: operation.text };
+      steps[operation.position] = {
+        ...current,
+        text: operation.text,
+        ...(operation.durationSeconds !== undefined
+          ? { durationSeconds: operation.durationSeconds }
+          : {}),
+      };
       return { ...recipe, steps };
     }
     case 'reorderSteps': {

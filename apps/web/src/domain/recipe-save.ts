@@ -143,6 +143,7 @@ export interface StoredIngredientRow {
 export interface StoredStepRow {
   position: number;
   text: string;
+  durationSeconds?: number | null;
 }
 
 export interface StoredRecipeState {
@@ -221,7 +222,11 @@ function toIngredientRows(
 }
 
 function toStepRows(steps: SaveRecipeInput['steps']): StoredStepRow[] {
-  return steps.map((step, position) => ({ position, text: step.text }));
+  return steps.map((step, position) => ({
+    position,
+    text: step.text,
+    durationSeconds: step.durationSeconds ?? null,
+  }));
 }
 
 function byPosition<T extends { position: number }>(rows: T[]): T[] {
@@ -253,7 +258,10 @@ function buildSnapshot(state: StoredRecipeState): RecipeSnapshot {
             ? { sourceType: 'user_product', sourceId: row.userProductId }
             : null,
     })),
-    steps: byPosition(state.steps).map((row) => ({ text: row.text })),
+    steps: byPosition(state.steps).map((row) => ({
+      text: row.text,
+      durationSeconds: row.durationSeconds ?? null,
+    })),
     tags: state.tags,
     imagePath: recipe.imagePath,
     nutrition: recipe.nutrition,
@@ -413,6 +421,7 @@ interface IngredientDbRow {
 interface StepDbRow {
   position: number;
   text: string;
+  duration_seconds: number | null;
 }
 
 interface TagDbRow {
@@ -470,7 +479,7 @@ export function createSupabaseRecipeStore(
           .order('position'),
         supabase
           .from('recipe_steps')
-          .select('position, text')
+          .select('position, text, duration_seconds')
           .eq('recipe_id', recipeId)
           .order('position'),
         supabase.from('recipe_tags').select('tag_id').eq('recipe_id', recipeId),
@@ -524,6 +533,7 @@ export function createSupabaseRecipeStore(
         steps: ((stepsRes.data ?? []) as StepDbRow[]).map((r) => ({
           position: r.position,
           text: r.text,
+          durationSeconds: r.duration_seconds ?? null,
         })),
         tags,
       };
@@ -638,6 +648,7 @@ export function createSupabaseRecipeStore(
           recipe_id: recipeId,
           position: r.position,
           text: r.text,
+          duration_seconds: r.durationSeconds,
         })),
       );
       checkError(error);

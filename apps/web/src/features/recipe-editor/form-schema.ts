@@ -19,6 +19,9 @@ export const formIngredientSchema = z.object({
 
 export const formStepSchema = z.object({
   text: z.string().min(1, 'Step text is required').max(5000),
+  // Kept permissive at the RHF boundary; parseRecipeFormValues normalizes the
+  // browser's string/blank representation and reports a field-level error.
+  durationSeconds: z.any(),
 });
 
 export const recipeFormSchema = z.object({
@@ -115,7 +118,25 @@ export function parseRecipeFormValues(
     sourceName: normalizeNullableString(values.sourceName),
     sourceUrl,
     ingredients,
-    steps: values.steps.map((step) => ({ text: step.text.trim() })),
+    steps: values.steps.map((step, index) => {
+      const rawDuration = step.durationSeconds;
+      const durationSeconds =
+        rawDuration === '' || rawDuration === null || rawDuration === undefined
+          ? null
+          : Number(rawDuration);
+      if (
+        durationSeconds !== null &&
+        (!Number.isInteger(durationSeconds) || durationSeconds <= 0)
+      ) {
+        (fieldErrors.steps ??= {})[index] = {
+          durationSeconds: {
+            type: 'manual',
+            message: 'Enter a positive whole number of seconds or leave blank.',
+          },
+        };
+      }
+      return { text: step.text.trim(), durationSeconds };
+    }),
     tags: values.tags.map((tag) => tag.trim()).filter((tag) => tag !== ''),
   };
 

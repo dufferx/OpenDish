@@ -161,6 +161,33 @@ describe('applyModificationOperations', () => {
       expect(result.steps[1]).toEqual({ text: 'Simmer for 15 minutes.' });
     });
 
+    it('updates or clears optional duration metadata', () => {
+      const withDuration = applyModificationOperations(validRecipeDraft, [
+        {
+          kind: 'updateStep',
+          position: 1,
+          text: 'Simmer.',
+          durationSeconds: 900,
+        },
+      ]);
+      expect(withDuration.steps[1]).toEqual({
+        text: 'Simmer.',
+        durationSeconds: 900,
+      });
+      const cleared = applyModificationOperations(withDuration, [
+        {
+          kind: 'updateStep',
+          position: 1,
+          text: 'Simmer gently.',
+          durationSeconds: null,
+        },
+      ]);
+      expect(cleared.steps[1]).toEqual({
+        text: 'Simmer gently.',
+        durationSeconds: null,
+      });
+    });
+
     it('reorderSteps accepts a full permutation', () => {
       const result = applyModificationOperations(validRecipeDraft, [
         { kind: 'reorderSteps', order: [2, 0, 1] },
@@ -230,7 +257,11 @@ describe('applyModificationOperations', () => {
     const result = applyModificationOperations(validRecipeDraft, [
       {
         kind: 'addIngredient',
-        ingredient: { name: 'Bacon', quantity: makeQuantity(4, 1), unit: 'slices' },
+        ingredient: {
+          name: 'Bacon',
+          quantity: makeQuantity(4, 1),
+          unit: 'slices',
+        },
       },
       {
         kind: 'addStep',
